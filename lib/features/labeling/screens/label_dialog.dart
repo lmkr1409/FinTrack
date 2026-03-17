@@ -14,6 +14,7 @@ import '../../../models/sub_category.dart';
 import '../../../models/transaction.dart';
 import '../../../services/providers.dart';
 import '../../../core/utils/color_helper.dart';
+import '../../../core/widgets/autocomplete_field.dart';
 
 /// Bottom sheet dialog for labeling a transaction.
 /// If [applyToAll] is ON (default), also labels all unlabeled transactions
@@ -38,6 +39,7 @@ class _LabelDialogState extends ConsumerState<LabelDialog> {
   int? _purposeId;
   int? _accountId;
   int? _cardId;
+  String _transactionType = 'DEBIT';
   bool _applyToAll = true;
 
   // Lookup lists
@@ -65,6 +67,7 @@ class _LabelDialogState extends ConsumerState<LabelDialog> {
     _purposeId = t.purposeId;
     _accountId = t.accountId;
     _cardId = t.cardId;
+    _transactionType = t.transactionType;
     _loadLookups();
   }
 
@@ -116,6 +119,7 @@ class _LabelDialogState extends ConsumerState<LabelDialog> {
       'purpose_id': _purposeId,
       'account_id': _accountId,
       'card_id': _cardId,
+      'transaction_type': _transactionType,
       'updated_time': DateFormat('yyyy-MM-dd HH:mm:ss').format(DateTime.now()),
     };
     // Remove null values so existing DB values are cleared only when explicitly set
@@ -136,10 +140,11 @@ class _LabelDialogState extends ConsumerState<LabelDialog> {
 
   Future<void> _addNew<T>(
     String title,
+    String initialText,
     Future<T> Function(String name) onCreate,
     void Function(T newItem) onCreated,
   ) async {
-    final nameCtrl = TextEditingController();
+    final nameCtrl = TextEditingController(text: initialText);
     final nameStr = await showDialog<String>(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -234,143 +239,149 @@ class _LabelDialogState extends ConsumerState<LabelDialog> {
                     controller: scrollCtrl,
                     padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
                     children: [
-                      // Category
-                      _buildDropdown<int?>(
-                        label: 'Category',
-                        value: _categoryId,
-                        items: [
-                          const DropdownMenuItem(value: null, child: Text('None')),
-                          ..._categories.map((c) => DropdownMenuItem(value: c.id, child: Text(c.categoryName))),
+                      // Transaction Type
+                      DropdownButtonFormField<String>(
+                        initialValue: _transactionType,
+                        decoration: const InputDecoration(labelText: 'Transaction Type', prefixIcon: Icon(Icons.swap_horiz_rounded)),
+                        items: const [
+                          DropdownMenuItem(value: 'DEBIT', child: Text('Debit (Expense)')),
+                          DropdownMenuItem(value: 'CREDIT', child: Text('Credit (Income)')),
+                          DropdownMenuItem(value: 'TRANSFER', child: Text('Transfer')),
                         ],
-                        onChanged: (v) {
-                          setState(() => _categoryId = v);
-                          if (v != null) {
-                            _loadSubs(v);
+                        onChanged: (val) {
+                          if (val != null) setState(() => _transactionType = val);
+                        },
+                      ),
+                      const SizedBox(height: 10),
+                      // Category
+                      AutocompleteField<Category>(
+                        label: 'Category',
+                        initialItem: _categoryId == null ? null : _categories.where((c) => c.id == _categoryId).firstOrNull,
+                        items: _categories,
+                        displayStringForOption: (c) => c.categoryName,
+                        onChanged: (c) {
+                          setState(() => _categoryId = c?.id);
+                          if (c != null) {
+                            _loadSubs(c.id!);
                           } else {
                             setState(() { _subCategories = []; _subcategoryId = null; });
                           }
                         },
-                        onAddNew: () => _addNew<Category>(
+                        onAddNew: (text) => _addNew<Category>(
                           'Category',
-                          (name) => ref.read(categoryRepositoryProvider).insert(Category(categoryName: name, icon: 'category', iconColor: ColorHelper.toHex(Colors.grey)).toMap()).then((id) => Category(id: id, categoryName: name, icon: 'category', iconColor: ColorHelper.toHex(Colors.grey))),
+                          text,
+                          (name) => ref.read(categoryRepositoryProvider).insert(Category(categoryName: name, icon: 'circleQuestion', iconColor: ColorHelper.toHex(Colors.grey), priority: 99).toMap()).then((id) => Category(id: id, categoryName: name, icon: 'circleQuestion', iconColor: ColorHelper.toHex(Colors.grey), priority: 99)),
                           (c) => setState(() => _categoryId = c.id),
                         ),
                       ),
                       const SizedBox(height: 10),
                       // Sub-category
-                      _buildDropdown<int?>(
+                      AutocompleteField<SubCategory>(
                         label: 'Sub-Category',
-                        value: _subcategoryId,
-                        items: [
-                          DropdownMenuItem(value: null, child: Text(_categoryId == null ? 'Select category first' : 'None')),
-                          ..._subCategories.map((s) => DropdownMenuItem(value: s.id, child: Text(s.subcategoryName))),
-                        ],
-                        onChanged: _categoryId == null ? null : (v) => setState(() => _subcategoryId = v),
-                        onAddNew: () {
+                        initialItem: _subcategoryId == null ? null : _subCategories.where((s) => s.id == _subcategoryId).firstOrNull,
+                        items: _subCategories,
+                        displayStringForOption: (s) => s.subcategoryName,
+                        onChanged: (s) => setState(() => _subcategoryId = s?.id),
+                        onAddNew: (text) {
                           if (_categoryId == null) {
                             ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Please select a Category first'), backgroundColor: Colors.orange));
                             return;
                           }
                           _addNew<SubCategory>(
                             'Sub-Category',
-                            (name) => ref.read(subCategoryRepositoryProvider).insert(SubCategory(categoryId: _categoryId!, subcategoryName: name).toMap()).then((id) => SubCategory(id: id, categoryId: _categoryId!, subcategoryName: name)),
+                            text,
+                            (name) => ref.read(subCategoryRepositoryProvider).insert(SubCategory(categoryId: _categoryId!, subcategoryName: name, priority: 99).toMap()).then((id) => SubCategory(id: id, categoryId: _categoryId!, subcategoryName: name, priority: 99)),
                             (s) { setState(() => _subcategoryId = s.id); _loadSubs(_categoryId!); },
                           );
                         },
                       ),
                       const SizedBox(height: 10),
                       // Merchant
-                      _buildDropdown<int?>(
+                      AutocompleteField<Merchant>(
                         label: 'Merchant',
-                        value: _merchantId,
-                        items: [
-                          const DropdownMenuItem(value: null, child: Text('None')),
-                          ..._merchants.map((m) => DropdownMenuItem(value: m.id, child: Text(m.merchantName))),
-                        ],
-                        onChanged: (v) => setState(() => _merchantId = v),
-                        onAddNew: () => _addNew<Merchant>(
+                        initialItem: _merchantId == null ? null : _merchants.where((m) => m.id == _merchantId).firstOrNull,
+                        items: _merchants,
+                        displayStringForOption: (m) => m.merchantName,
+                        onChanged: (m) => setState(() => _merchantId = m?.id),
+                        onAddNew: (text) => _addNew<Merchant>(
                           'Merchant',
-                          (name) => ref.read(merchantRepositoryProvider).insert(Merchant(merchantName: name).toMap()).then((id) => Merchant(id: id, merchantName: name)),
+                          text,
+                          (name) => ref.read(merchantRepositoryProvider).insert(Merchant(merchantName: name, priority: 99, iconColor: '#9E9E9E', icon: 'store').toMap()).then((id) => Merchant(id: id, merchantName: name, priority: 99, iconColor: '#9E9E9E', icon: 'store')),
                           (m) => setState(() => _merchantId = m.id),
                         ),
                       ),
                       const SizedBox(height: 10),
                       // Payment Method
-                      _buildDropdown<int?>(
+                      AutocompleteField<PaymentMethod>(
                         label: 'Payment Method',
-                        value: _paymentMethodId,
-                        items: [
-                          const DropdownMenuItem(value: null, child: Text('None')),
-                          ..._paymentMethods.map((p) => DropdownMenuItem(value: p.id, child: Text(p.paymentMethodName))),
-                        ],
-                        onChanged: (v) => setState(() => _paymentMethodId = v),
-                        onAddNew: () => _addNew<PaymentMethod>(
+                        initialItem: _paymentMethodId == null ? null : _paymentMethods.where((p) => p.id == _paymentMethodId).firstOrNull,
+                        items: _paymentMethods,
+                        displayStringForOption: (p) => p.paymentMethodName,
+                        onChanged: (p) => setState(() => _paymentMethodId = p?.id),
+                        onAddNew: (text) => _addNew<PaymentMethod>(
                           'Payment Method',
-                          (name) => ref.read(paymentMethodRepositoryProvider).insert(PaymentMethod(paymentMethodName: name).toMap()).then((id) => PaymentMethod(id: id, paymentMethodName: name)),
+                          text,
+                          (name) => ref.read(paymentMethodRepositoryProvider).insert(PaymentMethod(paymentMethodName: name, priority: 99).toMap()).then((id) => PaymentMethod(id: id, paymentMethodName: name, priority: 99)),
                           (p) => setState(() => _paymentMethodId = p.id),
                         ),
                       ),
                       const SizedBox(height: 10),
                       // Expense Source
-                      _buildDropdown<int?>(
+                      AutocompleteField<ExpenseSource>(
                         label: 'Expense Source',
-                        value: _expenseSourceId,
-                        items: [
-                          const DropdownMenuItem(value: null, child: Text('None')),
-                          ..._expenseSources.map((s) => DropdownMenuItem(value: s.id, child: Text(s.expenseSourceName))),
-                        ],
-                        onChanged: (v) => setState(() => _expenseSourceId = v),
-                        onAddNew: () => _addNew<ExpenseSource>(
+                        initialItem: _expenseSourceId == null ? null : _expenseSources.where((s) => s.id == _expenseSourceId).firstOrNull,
+                        items: _expenseSources,
+                        displayStringForOption: (s) => s.expenseSourceName,
+                        onChanged: (s) => setState(() => _expenseSourceId = s?.id),
+                        onAddNew: (text) => _addNew<ExpenseSource>(
                           'Expense Source',
-                          (name) => ref.read(expenseSourceRepositoryProvider).insert(ExpenseSource(expenseSourceName: name).toMap()).then((id) => ExpenseSource(id: id, expenseSourceName: name)),
+                          text,
+                          (name) => ref.read(expenseSourceRepositoryProvider).insert(ExpenseSource(expenseSourceName: name, priority: 99).toMap()).then((id) => ExpenseSource(id: id, expenseSourceName: name, priority: 99)),
                           (s) => setState(() => _expenseSourceId = s.id),
                         ),
                       ),
                       const SizedBox(height: 10),
                       // Expense Purpose
-                      _buildDropdown<int?>(
+                      AutocompleteField<ExpensePurpose>(
                         label: 'Expense Purpose',
-                        value: _purposeId,
-                        items: [
-                          const DropdownMenuItem(value: null, child: Text('None')),
-                          ..._purposes.map((p) => DropdownMenuItem(value: p.id, child: Text(p.expenseFor))),
-                        ],
-                        onChanged: (v) => setState(() => _purposeId = v),
-                        onAddNew: () => _addNew<ExpensePurpose>(
+                        initialItem: _purposeId == null ? null : _purposes.where((p) => p.id == _purposeId).firstOrNull,
+                        items: _purposes,
+                        displayStringForOption: (p) => p.expenseFor,
+                        onChanged: (p) => setState(() => _purposeId = p?.id),
+                        onAddNew: (text) => _addNew<ExpensePurpose>(
                           'Expense Purpose',
-                          (name) => ref.read(expensePurposeRepositoryProvider).insert(ExpensePurpose(expenseFor: name).toMap()).then((id) => ExpensePurpose(id: id, expenseFor: name)),
+                          text,
+                          (name) => ref.read(expensePurposeRepositoryProvider).insert(ExpensePurpose(expenseFor: name, priority: 99).toMap()).then((id) => ExpensePurpose(id: id, expenseFor: name, priority: 99)),
                           (p) => setState(() => _purposeId = p.id),
                         ),
                       ),
                       const SizedBox(height: 10),
                       // Account
-                      _buildDropdown<int?>(
+                      AutocompleteField<Account>(
                         label: 'Account',
-                        value: _accountId,
-                        items: [
-                          const DropdownMenuItem(value: null, child: Text('None')),
-                          ..._accounts.map((a) => DropdownMenuItem(value: a.id, child: Text(a.accountName))),
-                        ],
-                        onChanged: (v) => setState(() => _accountId = v),
-                        onAddNew: () => _addNew<Account>(
+                        initialItem: _accountId == null ? null : _accounts.where((a) => a.id == _accountId).firstOrNull,
+                        items: _accounts,
+                        displayStringForOption: (a) => a.accountName,
+                        onChanged: (a) => setState(() => _accountId = a?.id),
+                        onAddNew: (text) => _addNew<Account>(
                           'Account',
-                          (name) => ref.read(accountRepositoryProvider).insert(Account(accountName: name, balance: 0, icon: 'account_balance', iconColor: ColorHelper.toHex(Colors.blue)).toMap()).then((id) => Account(id: id, accountName: name, balance: 0, icon: 'account_balance', iconColor: ColorHelper.toHex(Colors.blue))),
+                          text,
+                          (name) => ref.read(accountRepositoryProvider).insert(Account(accountName: name, balance: 0, icon: 'buildingColumns', iconColor: ColorHelper.toHex(Colors.blue), priority: 99).toMap()).then((id) => Account(id: id, accountName: name, balance: 0, icon: 'buildingColumns', iconColor: ColorHelper.toHex(Colors.blue), priority: 99)),
                           (a) => setState(() => _accountId = a.id),
                         ),
                       ),
                       const SizedBox(height: 10),
                       // Card
-                      _buildDropdown<int?>(
+                      AutocompleteField<model.Card>(
                         label: 'Card',
-                        value: _cardId,
-                        items: [
-                          const DropdownMenuItem(value: null, child: Text('None')),
-                          ..._cards.map((c) => DropdownMenuItem(value: c.id, child: Text(c.cardName))),
-                        ],
-                        onChanged: (v) => setState(() => _cardId = v),
-                        onAddNew: () => _addNew<model.Card>(
+                        initialItem: _cardId == null ? null : _cards.where((c) => c.id == _cardId).firstOrNull,
+                        items: _cards,
+                        displayStringForOption: (c) => c.cardName,
+                        onChanged: (c) => setState(() => _cardId = c?.id),
+                        onAddNew: (text) => _addNew<model.Card>(
                           'Card',
-                          (name) => ref.read(cardRepositoryProvider).insert(model.Card(accountId: _accountId, cardName: name, cardType: 'Credit', cardNumber: '0000', cardExpiryDate: '12/99', cardNetwork: 'Visa', balance: 0).toMap()).then((id) => model.Card(id: id, accountId: _accountId, cardName: name, cardType: 'Credit', cardNumber: '0000', cardExpiryDate: '12/99', cardNetwork: 'Visa', balance: 0)),
+                          text,
+                          (name) => ref.read(cardRepositoryProvider).insert(model.Card(accountId: _accountId, cardName: name, cardType: 'Credit', cardNumber: '0000', cardExpiryDate: '12/99', cardNetwork: 'Visa', balance: 0, priority: 99).toMap()).then((id) => model.Card(id: id, accountId: _accountId, cardName: name, cardType: 'Credit', cardNumber: '0000', cardExpiryDate: '12/99', cardNetwork: 'Visa', balance: 0, priority: 99)),
                           (c) => setState(() => _cardId = c.id),
                         ),
                       ),
@@ -397,33 +408,6 @@ class _LabelDialogState extends ConsumerState<LabelDialog> {
           ),
         ],
       ),
-    );
-  }
-
-  Widget _buildDropdown<T>({
-    required String label,
-    required T value,
-    required List<DropdownMenuItem<T>> items,
-    required ValueChanged<T?>? onChanged,
-    required VoidCallback onAddNew,
-  }) {
-    return Row(
-      children: [
-        Expanded(
-          child: DropdownButtonFormField<T>(
-            initialValue: value,
-            decoration: InputDecoration(labelText: label, border: const OutlineInputBorder(), isDense: true),
-            items: items,
-            onChanged: onChanged,
-          ),
-        ),
-        const SizedBox(width: 8),
-        IconButton.filledTonal(
-          icon: const Icon(Icons.add),
-          tooltip: 'Add new $label',
-          onPressed: onAddNew,
-        ),
-      ],
     );
   }
 }

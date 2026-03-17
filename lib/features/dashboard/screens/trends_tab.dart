@@ -191,29 +191,47 @@ class _DualTrendSection extends StatelessWidget {
                             children: [
                               // Income Bar
                               Expanded(
-                                child: FractionallySizedBox(
-                                  heightFactor: income > 0 ? incomeFraction.clamp(0.05, 1.0) : 0,
-                                  alignment: Alignment.bottomCenter,
-                                  child: Container(
-                                    decoration: BoxDecoration(
-                                      color: AppColors.income.withValues(alpha: 0.8),
-                                      borderRadius: const BorderRadius.vertical(top: Radius.circular(2)),
+                                child: Column(
+                                  mainAxisAlignment: MainAxisAlignment.end,
+                                  children: [
+                                    Text(income > 0 ? '${(income / 1000).toStringAsFixed(0)}k' : '', style: const TextStyle(fontSize: 7, color: AppColors.textMuted), maxLines: 1),
+                                    const SizedBox(height: 2),
+                                    Flexible(
+                                      child: FractionallySizedBox(
+                                        heightFactor: income > 0 ? incomeFraction.clamp(0.05, 1.0) : 0,
+                                        alignment: Alignment.bottomCenter,
+                                        child: Container(
+                                          decoration: BoxDecoration(
+                                            color: AppColors.income.withValues(alpha: 0.8),
+                                            borderRadius: const BorderRadius.vertical(top: Radius.circular(2)),
+                                          ),
+                                        ),
+                                      ),
                                     ),
-                                  ),
+                                  ],
                                 ),
                               ),
                               const SizedBox(width: 1),
                               // Expense Bar
                               Expanded(
-                                child: FractionallySizedBox(
-                                  heightFactor: expense > 0 ? expenseFraction.clamp(0.05, 1.0) : 0,
-                                  alignment: Alignment.bottomCenter,
-                                  child: Container(
-                                    decoration: BoxDecoration(
-                                      color: AppColors.expense.withValues(alpha: 0.8),
-                                      borderRadius: const BorderRadius.vertical(top: Radius.circular(2)),
+                                child: Column(
+                                  mainAxisAlignment: MainAxisAlignment.end,
+                                  children: [
+                                    Text(expense > 0 ? '${(expense / 1000).toStringAsFixed(0)}k' : '', style: const TextStyle(fontSize: 7, color: AppColors.textMuted), maxLines: 1),
+                                    const SizedBox(height: 2),
+                                    Flexible(
+                                      child: FractionallySizedBox(
+                                        heightFactor: expense > 0 ? expenseFraction.clamp(0.05, 1.0) : 0,
+                                        alignment: Alignment.bottomCenter,
+                                        child: Container(
+                                          decoration: BoxDecoration(
+                                            color: AppColors.expense.withValues(alpha: 0.8),
+                                            borderRadius: const BorderRadius.vertical(top: Radius.circular(2)),
+                                          ),
+                                        ),
+                                      ),
                                     ),
-                                  ),
+                                  ],
                                 ),
                               ),
                             ],

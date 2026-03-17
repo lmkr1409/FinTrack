@@ -5,6 +5,7 @@ import '../../../core/utils/color_helper.dart';
 import '../../../core/utils/icon_helper.dart';
 import '../../../models/merchant.dart';
 import '../../../services/providers.dart';
+import '../../../core/widgets/icon_picker.dart';
 
 /// Merchants CRUD tab (Tab 4 of Configuration).
 class MerchantsTab extends ConsumerStatefulWidget {
@@ -41,13 +42,24 @@ class _MerchantsTabState extends ConsumerState<MerchantsTab> {
 
     final result = await showDialog<bool>(
       context: context,
-      builder: (ctx) => AlertDialog(
-        title: Text(isEdit ? 'Edit Merchant' : 'Add Merchant'),
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setDialogState) => AlertDialog(
+          title: Text(isEdit ? 'Edit Merchant' : 'Add Merchant'),
         content: SingleChildScrollView(
           child: Column(mainAxisSize: MainAxisSize.min, children: [
             TextField(controller: nameCtrl, decoration: const InputDecoration(labelText: 'Merchant Name', border: OutlineInputBorder()), textCapitalization: TextCapitalization.words),
             const SizedBox(height: 12),
-            TextField(controller: iconCtrl, decoration: InputDecoration(labelText: 'Icon Name', border: const OutlineInputBorder(), suffixIcon: Icon(IconHelper.getIcon(iconCtrl.text)))),
+            TextFormField(
+              controller: iconCtrl,
+              readOnly: true,
+              decoration: InputDecoration(labelText: 'Icon', border: const OutlineInputBorder(), suffixIcon: Icon(IconHelper.getIcon(iconCtrl.text))),
+              onTap: () async {
+                final selected = await IconPicker.show(context, initialIcon: iconCtrl.text);
+                if (selected != null) {
+                  setDialogState(() => iconCtrl.text = selected);
+                }
+              },
+            ),
             const SizedBox(height: 12),
             TextField(controller: colorCtrl, decoration: InputDecoration(labelText: 'Icon Color (hex)', border: const OutlineInputBorder(), suffixIcon: CircleAvatar(radius: 12, backgroundColor: ColorHelper.fromHex(colorCtrl.text)))),
           ]),
@@ -56,6 +68,7 @@ class _MerchantsTabState extends ConsumerState<MerchantsTab> {
           TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
           FilledButton(onPressed: () => Navigator.pop(ctx, true), child: Text(isEdit ? 'Update' : 'Add')),
         ],
+      ),
       ),
     );
     if (result != true) return;

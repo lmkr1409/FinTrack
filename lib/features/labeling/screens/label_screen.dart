@@ -1,6 +1,9 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:share_plus/share_plus.dart';
 
 import '../../../core/theme/app_colors.dart';
 import '../../../core/utils/color_helper.dart';
@@ -30,7 +33,16 @@ class _LabelScreenState extends ConsumerState<LabelScreen> with SingleTickerProv
   late final TabController _tabController;
 
   List<Transaction> _unlabeled = [];
+  List<Transaction> _autoLabeled = [];
   List<Transaction> _labeled = [];
+
+  // Filters
+  int? _filterMonth;
+  int? _filterYear;
+  int? _filterAccountId;
+  int? _filterCardId;
+  String? _filterType;
+  String? _filterSort;
 
   // Lookup maps for displaying labels
   Map<int, Category> _categoryMap = {};
@@ -47,7 +59,10 @@ class _LabelScreenState extends ConsumerState<LabelScreen> with SingleTickerProv
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 2, vsync: this);
+    _tabController = TabController(length: 3, vsync: this);
+    _tabController.addListener(() {
+      if (mounted) setState(() {});
+    });
     _loadData();
   }
 
@@ -61,8 +76,25 @@ class _LabelScreenState extends ConsumerState<LabelScreen> with SingleTickerProv
     setState(() => _loading = true);
 
     final repo = ref.read(transactionRepositoryProvider);
-    final unlabeled = await repo.getFiltered(labeled: false);
-    final labeled = await repo.getFiltered(labeled: true);
+    
+    final unlabeled = await repo.getFiltered(
+      labeled: false, isAutoLabeled: false, 
+      month: _filterMonth, year: _filterYear, 
+      accountId: _filterAccountId, cardId: _filterCardId, transactionType: _filterType,
+      orderBy: _filterSort,
+    );
+    final autoLabeled = await repo.getFiltered(
+      labeled: false, isAutoLabeled: true,
+      month: _filterMonth, year: _filterYear, 
+      accountId: _filterAccountId, cardId: _filterCardId, transactionType: _filterType,
+      orderBy: _filterSort,
+    );
+    final labeled = await repo.getFiltered(
+      labeled: true,
+      month: _filterMonth, year: _filterYear, 
+      accountId: _filterAccountId, cardId: _filterCardId, transactionType: _filterType,
+      orderBy: _filterSort,
+    );
 
     final categories = await ref.read(categoryRepositoryProvider).getAllSorted();
     final subCats = await ref.read(subCategoryRepositoryProvider).getAll();
@@ -76,6 +108,7 @@ class _LabelScreenState extends ConsumerState<LabelScreen> with SingleTickerProv
     if (!mounted) return;
     setState(() {
       _unlabeled = unlabeled;
+      _autoLabeled = autoLabeled;
       _labeled = labeled;
       _categoryMap = {for (final c in categories) c.id!: c};
       _subCategoryMap = {for (final s in subCats) s.id!: s};
@@ -98,31 +131,179 @@ class _LabelScreenState extends ConsumerState<LabelScreen> with SingleTickerProv
     );
   }
 
+  Future<void> _exportFastText() async {
+    if (_labeled.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('No labeled data to export.')));
+      return;
+    }
+
+    final buffer = StringBuffer();
+    for (final txn in _labeled) {
+      final cat = txn.categoryId != null ? _categoryMap[txn.categoryId]?.categoryName.replaceAll(' ', '') : 'None';
+      final sub = txn.subcategoryId != null ? _subCategoryMap[txn.subcategoryId]?.subcategoryName.replaceAll(' ', '') : 'None';
+      final merchant = txn.merchantId != null ? _merchantMap[txn.merchantId]?.merchantName.replaceAll(' ', '') : 'None';
+      final method = txn.paymentMethodId != null ? _paymentMethodMap[txn.paymentMethodId]?.paymentMethodName.replaceAll(' ', '') : 'None';
+      
+      final type = txn.transactionType.replaceAll(' ', '');
+      final desc = txn.description?.replaceAll('\n', ' ').replaceAll('\r', '') ?? '';
+      
+      buffer.writeln('__label__${type}_${cat}_${sub}_${merchant}_$method $desc');
+    }
+
+    try {
+      final dir = await getApplicationDocumentsDirectory();
+      final file = File('${dir.path}/fintrack_fasttext.txt');
+      await file.writeAsString(buffer.toString());
+      
+      // ignore: deprecated_member_use
+      await Share.shareXFiles([XFile(file.path)], text: 'FinTrack Labeled Dataset');
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Export failed: $e')));
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: PreferredSize(
-        preferredSize: const Size.fromHeight(48),
-        child: TabBar(
+      appBar: AppBar(
+        title: const Text('Labels'),
+        actions: [
+          if (_tabController.index == 2)
+            IconButton(
+              icon: const Icon(Icons.download_rounded),
+              onPressed: _exportFastText,
+              tooltip: 'Export FastText Data',
+            ),
+        ],
+        bottom: TabBar(
           controller: _tabController,
           tabs: [
             Tab(text: 'Unlabeled (${_unlabeled.length})'),
+            Tab(text: 'Auto (${_autoLabeled.length})'),
             Tab(text: 'Labeled (${_labeled.length})'),
           ],
           labelColor: AppColors.primary,
           unselectedLabelColor: AppColors.textSecondary,
           indicatorColor: AppColors.primary,
+          labelStyle: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
+          unselectedLabelStyle: const TextStyle(fontSize: 12),
         ),
       ),
       body: _loading
           ? const Center(child: CircularProgressIndicator())
-          : TabBarView(
-              controller: _tabController,
+          : Column(
               children: [
-                _buildList(_unlabeled, isLabeled: false),
-                _buildList(_labeled, isLabeled: true),
+                _buildFilterBar(),
+                Expanded(
+                  child: TabBarView(
+                    controller: _tabController,
+                    children: [
+                      _buildList(_unlabeled, isLabeled: false),
+                      _buildList(_autoLabeled, isLabeled: false), // Auto-labeled are technically false for completion
+                      _buildList(_labeled, isLabeled: true),
+                    ],
+                  ),
+                ),
               ],
             ),
+    );
+  }
+
+  Widget _buildFilterBar() {
+    return SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      child: Row(
+        children: [
+          _buildDropdown<String>(
+            context: context,
+            hint: 'Sort',
+            value: _filterSort,
+            items: const [
+              DropdownMenuItem(value: 'transaction_date DESC, created_time DESC', child: Text('Date (Newest)')),
+              DropdownMenuItem(value: 'transaction_date ASC, created_time ASC', child: Text('Date (Oldest)')),
+              DropdownMenuItem(value: 'amount DESC', child: Text('Amount (High-Low)')),
+              DropdownMenuItem(value: 'amount ASC', child: Text('Amount (Low-High)')),
+            ],
+            onChanged: (v) { setState(() => _filterSort = v); _loadData(); },
+          ),
+          const SizedBox(width: 8),
+          _buildDropdown<int>(
+            context: context,
+            hint: 'Year',
+            value: _filterYear,
+            items: List.generate(10, (i) => DropdownMenuItem(value: DateTime.now().year - i, child: Text('${DateTime.now().year - i}'))),
+            onChanged: (v) { setState(() => _filterYear = v); _loadData(); },
+          ),
+          const SizedBox(width: 8),
+          _buildDropdown<int>(
+            context: context,
+            hint: 'Month',
+            value: _filterMonth,
+            items: List.generate(12, (i) => DropdownMenuItem(value: i + 1, child: Text(DateFormat('MMM').format(DateTime(2020, i + 1))))),
+            onChanged: (v) { setState(() => _filterMonth = v); _loadData(); },
+          ),
+          const SizedBox(width: 8),
+          _buildDropdown<int>(
+            context: context,
+            hint: 'Account',
+            value: _filterAccountId,
+            items: _accountMap.values.map((a) => DropdownMenuItem(value: a.id, child: Text(a.accountName))).toList(),
+            onChanged: (v) { setState(() => _filterAccountId = v); _loadData(); },
+          ),
+          const SizedBox(width: 8),
+          _buildDropdown<int>(
+            context: context,
+            hint: 'Card',
+            value: _filterCardId,
+            items: _cardMap.values.map((c) => DropdownMenuItem(value: c.id, child: Text(c.cardName))).toList(),
+            onChanged: (v) { setState(() => _filterCardId = v); _loadData(); },
+          ),
+          const SizedBox(width: 8),
+          _buildDropdown<String>(
+            context: context,
+            hint: 'Type',
+            value: _filterType,
+            items: const [
+              DropdownMenuItem(value: 'DEBIT', child: Text('Debit')),
+              DropdownMenuItem(value: 'CREDIT', child: Text('Credit')),
+              DropdownMenuItem(value: 'TRANSFER', child: Text('Transfer')),
+            ],
+            onChanged: (v) { setState(() => _filterType = v); _loadData(); },
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildDropdown<T>({
+    required String hint,
+    required T? value,
+    required List<DropdownMenuItem<T>> items,
+    required ValueChanged<T?> onChanged,
+    required BuildContext context,
+  }) {
+    return Container(
+      height: 36,
+      padding: const EdgeInsets.symmetric(horizontal: 8),
+      decoration: BoxDecoration(
+        color: AppColors.surfaceContainer,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: Theme.of(context).colorScheme.outlineVariant),
+      ),
+      child: DropdownButtonHideUnderline(
+        child: DropdownButton<T>(
+          value: value,
+          hint: Text(hint, style: const TextStyle(fontSize: 12, color: AppColors.textSecondary)),
+          items: [
+            DropdownMenuItem<T>(value: null, child: Text('All $hint', style: const TextStyle(fontSize: 12))),
+            ...items.map((i) => DropdownMenuItem<T>(value: i.value, child: DefaultTextStyle(style: const TextStyle(fontSize: 12, color: AppColors.textPrimary), child: i.child))),
+          ],
+          onChanged: onChanged,
+          icon: const Icon(Icons.keyboard_arrow_down, size: 16),
+        ),
+      ),
     );
   }
 
@@ -200,11 +381,12 @@ class _LabelScreenState extends ConsumerState<LabelScreen> with SingleTickerProv
                   backgroundColor: cat != null
                       ? ColorHelper.fromHex(cat.iconColor).withValues(alpha: 0.15)
                       : AppColors.surfaceContainer,
-                  child: Icon(
-                    cat != null ? IconHelper.getIcon(cat.icon) : (isDebit ? Icons.arrow_upward_rounded : Icons.arrow_downward_rounded),
-                    size: 18,
-                    color: cat != null ? ColorHelper.fromHex(cat.iconColor) : amountColor,
-                  ),
+                  child: cat != null
+                    ? Icon(IconHelper.getIcon(cat.icon), color: ColorHelper.fromHex(cat.iconColor))
+                    : Icon(
+                        isDebit ? Icons.arrow_upward_rounded : Icons.arrow_downward_rounded,
+                        color: isDebit ? AppColors.expense : AppColors.income,
+                      ),
                 ),
               ),
               // Text

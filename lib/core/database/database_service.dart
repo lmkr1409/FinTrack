@@ -32,12 +32,21 @@ class DatabaseService {
       path,
       version: AppConstants.databaseVersion,
       onCreate: _onCreate,
+      onUpgrade: _onUpgrade,
     );
   }
 
   /// Called when the database is created for the first time.
   Future<void> _onCreate(Database db, int version) async {
     await _executeSchemaScript(db);
+  }
+
+  /// Called when the database needs to be upgraded
+  Future<void> _onUpgrade(Database db, int oldVersion, int newVersion) async {
+    if (oldVersion < 2) {
+      // Version 2 adds is_auto_labeled column to transaction table
+      await db.execute('ALTER TABLE "transaction" ADD COLUMN is_auto_labeled INTEGER NOT NULL DEFAULT 0');
+    }
   }
 
   /// Reads and executes the SQL schema/seed file from assets.

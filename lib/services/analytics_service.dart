@@ -92,16 +92,13 @@ class AnalyticsService {
 
   Future<List<Map<String, dynamic>>> incomeVsExpenseLast12Months() async {
     final db = await _db.database;
-    // Get the start of the current month, then go back 11 months so we get 12 distinct months inclusive.
-    // e.g. if today is 2026-03-XX, we want >= 2025-04-01
     final now = DateTime.now();
     final startOfCurrentMonth = DateTime(now.year, now.month, 1);
     final twelveMonthsAgo = DateTime(startOfCurrentMonth.year, startOfCurrentMonth.month - 11, 1);
     
-    // Format YYYY-MM-DD
     final startStr = '${twelveMonthsAgo.year}-${twelveMonthsAgo.month.toString().padLeft(2, '0')}-01';
 
-    return db.rawQuery('''
+    final result = await db.rawQuery('''
       SELECT 
         substr(transaction_date, 1, 7) as period, 
         COALESCE(SUM(CASE WHEN transaction_type = 'CREDIT' THEN amount ELSE 0 END), 0) as income,
@@ -111,6 +108,34 @@ class AnalyticsService {
       GROUP BY period 
       ORDER BY period ASC
     ''', [startStr]);
+
+    // Create a map for quick lookup
+    final resultMap = {
+      for (var row in result) row['period'] as String: row
+    };
+
+    // Pad the last 12 months so it always paints exactly 12 columns
+    final paddedResult = <Map<String, dynamic>>[];
+    for (int i = 0; i < 12; i++) {
+      int nextMonth = twelveMonthsAgo.month + i;
+      int yearOffset = (nextMonth - 1) ~/ 12;
+      int m = (nextMonth - 1) % 12 + 1;
+      int y = twelveMonthsAgo.year + yearOffset;
+      
+      final period = '$y-${m.toString().padLeft(2, '0')}';
+      
+      if (resultMap.containsKey(period)) {
+        paddedResult.add(Map<String, dynamic>.from(resultMap[period]!));
+      } else {
+        paddedResult.add({
+          'period': period,
+          'income': 0.0,
+          'expense': 0.0,
+        });
+      }
+    }
+
+    return paddedResult;
   }
 
   // ─── Budget vs Actual ───────────────────────────────────

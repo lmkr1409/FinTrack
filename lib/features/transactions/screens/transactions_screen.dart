@@ -10,7 +10,6 @@ import '../../../services/providers.dart';
 import '../../../widgets/glass_card.dart';
 import 'add_transaction_screen.dart';
 import 'delete_transactions_sheet.dart';
-import 'transaction_filter_sheet.dart';
 import 'upload_statement_screen.dart';
 
 import '../../../core/utils/color_helper.dart';
@@ -32,19 +31,20 @@ class _TransactionsScreenState extends ConsumerState<TransactionsScreen> {
   Map<int, Merchant> _merchantMap = {};
   bool _loading = true;
 
-  String? _startDate;
-  String? _endDate;
+  int? _filterMonth;
+  int? _filterYear;
   String? _transactionType;
   int? _filterCategoryId;
   int? _filterAccountId;
   int? _filterMerchantId;
+  String? _filterSort;
 
   @override
   void initState() {
     super.initState();
     final now = DateTime.now();
-    _startDate = DateFormat('yyyy-MM-dd').format(DateTime(now.year, now.month, 1));
-    _endDate = DateFormat('yyyy-MM-dd').format(DateTime(now.year, now.month + 1, 0));
+    _filterMonth = now.month;
+    _filterYear = now.year;
     _loadData();
   }
 
@@ -57,28 +57,11 @@ class _TransactionsScreenState extends ConsumerState<TransactionsScreen> {
     _accountMap = {for (final a in accounts) a.id!: a};
     _merchantMap = {for (final m in merchants) m.id!: m};
     final transactions = await ref.read(transactionRepositoryProvider).getFiltered(
-          startDate: _startDate, endDate: _endDate, transactionType: _transactionType,
+          month: _filterMonth, year: _filterYear, transactionType: _transactionType,
           categoryId: _filterCategoryId, accountId: _filterAccountId, merchantId: _filterMerchantId,
+          orderBy: _filterSort,
         );
     setState(() { _transactions = transactions; _loading = false; });
-  }
-
-  Future<void> _openFilters() async {
-    final result = await showModalBottomSheet<Map<String, dynamic>>(
-      context: context, isScrollControlled: true,
-      builder: (_) => TransactionFilterSheet(
-        startDate: _startDate, endDate: _endDate, transactionType: _transactionType,
-        categoryId: _filterCategoryId, accountId: _filterAccountId, merchantId: _filterMerchantId,
-        categories: _categoryMap.values.toList(), accounts: _accountMap.values.toList(), merchants: _merchantMap.values.toList(),
-      ),
-    );
-    if (result == null) return;
-    setState(() {
-      _startDate = result['startDate']; _endDate = result['endDate'];
-      _transactionType = result['transactionType']; _filterCategoryId = result['categoryId'];
-      _filterAccountId = result['accountId']; _filterMerchantId = result['merchantId'];
-    });
-    await _loadData();
   }
 
   Future<void> _openAddTransaction() async {
@@ -144,53 +127,92 @@ class _TransactionsScreenState extends ConsumerState<TransactionsScreen> {
     }
   }
 
+  Future<void> _editTransaction(Transaction txn) async {
+    String type = txn.transactionType;
+    final amountController = TextEditingController(text: txn.amount.toStringAsFixed(2));
+    final formKey = GlobalKey<FormState>();
+
+    final saved = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (context, setDialogState) {
+          return AlertDialog(
+            title: const Text('Edit Transaction'),
+            content: Form(
+              key: formKey,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  DropdownButtonFormField<String>(
+                    initialValue: type,
+                    decoration: const InputDecoration(labelText: 'Type'),
+                    items: const [
+                      DropdownMenuItem(value: 'DEBIT', child: Text('Expense (Debit)')),
+                      DropdownMenuItem(value: 'CREDIT', child: Text('Income (Credit)')),
+                      DropdownMenuItem(value: 'TRANSFER', child: Text('Transfer')),
+                    ],
+                    onChanged: (v) => setDialogState(() => type = v!),
+                  ),
+                  const SizedBox(height: 16),
+                  TextFormField(
+                    controller: amountController,
+                    decoration: const InputDecoration(labelText: 'Amount'),
+                    keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                    validator: (v) {
+                      if (v == null || v.isEmpty) return 'Enter amount';
+                      if (double.tryParse(v) == null) return 'Invalid number';
+                      return null;
+                    },
+                  ),
+                ],
+              ),
+            ),
+            actions: [
+              TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+              FilledButton(
+                onPressed: () {
+                  if (formKey.currentState!.validate()) {
+                    Navigator.pop(ctx, true);
+                  }
+                },
+                child: const Text('Save'),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+
+    if (saved == true) {
+      final newAmount = double.parse(amountController.text);
+      if (newAmount != txn.amount || type != txn.transactionType) {
+        final updatedTxn = txn.copyWith(
+          amount: newAmount,
+          transactionType: type,
+          updatedTime: DateFormat('yyyy-MM-dd HH:mm:ss').format(DateTime.now()),
+        );
+        await ref.read(transactionRepositoryProvider).updateTransaction(updatedTxn);
+        await _loadData();
+      }
+    }
+    amountController.dispose();
+  }
+
+
   @override
   Widget build(BuildContext context) {
-    final activeFilters = <String>[
-      ?_transactionType,
-      if (_filterCategoryId != null) _categoryMap[_filterCategoryId]?.categoryName ?? '',
-      if (_filterAccountId != null) _accountMap[_filterAccountId]?.accountName ?? '',
-      if (_filterMerchantId != null) _merchantMap[_filterMerchantId]?.merchantName ?? '',
-    ];
-
     return Scaffold(
       appBar: PreferredSize(
         preferredSize: const Size.fromHeight(0),
         child: AppBar(
           automaticallyImplyLeading: false,
           toolbarHeight: 0,
-          actions: [
-            IconButton(
-              tooltip: 'Delete Transactions',
-              icon: const Icon(Icons.delete_sweep_rounded, color: AppColors.expense),
-              onPressed: _openDeleteSheet,
-            ),
-          ],
+          actions: [],
         ),
       ),
       body: Column(
         children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(12, 8, 4, 0),
-            child: Row(children: [
-              Expanded(child: Text('${_startDate ?? '...'} → ${_endDate ?? '...'}', style: TextStyle(color: AppColors.textSecondary, fontSize: 13))),
-              Badge(
-                isLabelVisible: activeFilters.isNotEmpty,
-                label: Text('${activeFilters.length}'),
-                child: IconButton(icon: const Icon(Icons.filter_list_rounded), onPressed: _openFilters),
-              ),
-              IconButton(
-                tooltip: 'Delete Transactions',
-                icon: Icon(Icons.delete_sweep_rounded, color: AppColors.expense.withValues(alpha: 0.8), size: 22),
-                onPressed: _openDeleteSheet,
-              ),
-            ]),
-          ),
-          if (activeFilters.isNotEmpty)
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 12),
-              child: Wrap(spacing: 6, children: activeFilters.map((f) => Chip(label: Text(f))).toList()),
-            ),
+          _buildFilterBar(),
           const Divider(height: 1),
           Expanded(
             child: _loading
@@ -219,12 +241,15 @@ class _TransactionsScreenState extends ConsumerState<TransactionsScreen> {
 
     return GlassCard(
       child: ListTile(
+        onTap: () => _editTransaction(txn),
         leading: CircleAvatar(
           backgroundColor: cat != null ? ColorHelper.fromHex(cat.iconColor).withValues(alpha: 0.15) : AppColors.surfaceContainer,
-          child: Icon(
-            cat != null ? IconHelper.getIcon(cat.icon) : (isTransfer ? Icons.swap_horiz_rounded : (isDebit ? Icons.arrow_upward_rounded : Icons.arrow_downward_rounded)),
-            color: cat != null ? ColorHelper.fromHex(cat.iconColor) : amountColor,
-          ),
+          child: cat != null
+            ? Icon(IconHelper.getIcon(cat.icon), color: ColorHelper.fromHex(cat.iconColor))
+            : Icon(
+                isTransfer ? Icons.swap_horiz_rounded : (isDebit ? Icons.arrow_upward_rounded : Icons.arrow_downward_rounded),
+                color: isDebit ? AppColors.expense : AppColors.income,
+              ),
         ),
         title: Text(
           txn.description ?? (merchant?.merchantName ?? cat?.categoryName ?? txn.transactionType),
@@ -239,8 +264,127 @@ class _TransactionsScreenState extends ConsumerState<TransactionsScreen> {
         trailing: Row(mainAxisSize: MainAxisSize.min, children: [
           Text('${isTransfer ? '' : (isDebit ? '-' : '+')}₹${txn.amount.toStringAsFixed(2)}', style: TextStyle(fontWeight: FontWeight.bold, color: amountColor)),
           const SizedBox(width: 4),
-          IconButton(icon: Icon(Icons.delete_outline, size: 18, color: AppColors.expense.withValues(alpha: 0.7)), onPressed: () => _confirmDelete(txn)),
+          IconButton(
+            icon: Icon(Icons.delete_outline, size: 18, color: AppColors.expense.withValues(alpha: 0.7)),
+            onPressed: () => _confirmDelete(txn),
+            constraints: const BoxConstraints(),
+            padding: const EdgeInsets.all(4),
+          ),
         ]),
+      ),
+    );
+  }
+
+  Widget _buildFilterBar() {
+    return SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      child: Row(
+        children: [
+          // Delete Transactions Icon Button built into the row for convenience
+          IconButton(
+            padding: EdgeInsets.zero,
+            constraints: const BoxConstraints(),
+            tooltip: 'Delete Transactions',
+            icon: Icon(Icons.delete_sweep_rounded, color: AppColors.expense.withValues(alpha: 0.8), size: 24),
+            onPressed: _openDeleteSheet,
+          ),
+          const SizedBox(width: 12),
+          _buildDropdown<String>(
+            context: context,
+            hint: 'Sort',
+            value: _filterSort,
+            items: const [
+              DropdownMenuItem(value: 'transaction_date DESC, created_time DESC', child: Text('Date (Newest)')),
+              DropdownMenuItem(value: 'transaction_date ASC, created_time ASC', child: Text('Date (Oldest)')),
+              DropdownMenuItem(value: 'amount DESC', child: Text('Amount (High-Low)')),
+              DropdownMenuItem(value: 'amount ASC', child: Text('Amount (Low-High)')),
+            ],
+            onChanged: (v) { setState(() => _filterSort = v); _loadData(); },
+          ),
+          const SizedBox(width: 8),
+          _buildDropdown<int>(
+            context: context,
+            hint: 'Year',
+            value: _filterYear,
+            items: List.generate(10, (i) => DropdownMenuItem(value: DateTime.now().year - i, child: Text('${DateTime.now().year - i}'))),
+            onChanged: (v) { setState(() => _filterYear = v); _loadData(); },
+          ),
+          const SizedBox(width: 8),
+          _buildDropdown<int>(
+            context: context,
+            hint: 'Month',
+            value: _filterMonth,
+            items: List.generate(12, (i) => DropdownMenuItem(value: i + 1, child: Text(DateFormat('MMM').format(DateTime(2020, i + 1))))),
+            onChanged: (v) { setState(() => _filterMonth = v); _loadData(); },
+          ),
+          const SizedBox(width: 8),
+          _buildDropdown<int>(
+            context: context,
+            hint: 'Category',
+            value: _filterCategoryId,
+            items: _categoryMap.values.map((c) => DropdownMenuItem(value: c.id, child: Text(c.categoryName))).toList(),
+            onChanged: (v) { setState(() => _filterCategoryId = v); _loadData(); },
+          ),
+          const SizedBox(width: 8),
+          _buildDropdown<int>(
+            context: context,
+            hint: 'Account',
+            value: _filterAccountId,
+            items: _accountMap.values.map((a) => DropdownMenuItem(value: a.id, child: Text(a.accountName))).toList(),
+            onChanged: (v) { setState(() => _filterAccountId = v); _loadData(); },
+          ),
+          const SizedBox(width: 8),
+          _buildDropdown<int>(
+            context: context,
+            hint: 'Merchant',
+            value: _filterMerchantId,
+            items: _merchantMap.values.map((m) => DropdownMenuItem(value: m.id, child: Text(m.merchantName))).toList(),
+            onChanged: (v) { setState(() => _filterMerchantId = v); _loadData(); },
+          ),
+          const SizedBox(width: 8),
+          _buildDropdown<String>(
+            context: context,
+            hint: 'Type',
+            value: _transactionType,
+            items: const [
+              DropdownMenuItem(value: 'DEBIT', child: Text('Debit')),
+              DropdownMenuItem(value: 'CREDIT', child: Text('Credit')),
+              DropdownMenuItem(value: 'TRANSFER', child: Text('Transfer')),
+            ],
+            onChanged: (v) { setState(() => _transactionType = v); _loadData(); },
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildDropdown<T>({
+    required String hint,
+    required T? value,
+    required List<DropdownMenuItem<T>> items,
+    required ValueChanged<T?> onChanged,
+    required BuildContext context,
+  }) {
+    return Container(
+      height: 36,
+      padding: const EdgeInsets.symmetric(horizontal: 8),
+      decoration: BoxDecoration(
+        color: AppColors.surfaceContainer,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: Theme.of(context).colorScheme.outlineVariant),
+      ),
+      child: DropdownButtonHideUnderline(
+        child: DropdownButton<T>(
+          value: value,
+          hint: Text(hint, style: const TextStyle(fontSize: 12, color: AppColors.textSecondary)),
+          items: [
+            DropdownMenuItem<T>(value: null, child: Text('All $hint', style: const TextStyle(fontSize: 12))),
+            ...items.map((i) => DropdownMenuItem<T>(value: i.value, child: DefaultTextStyle(style: const TextStyle(fontSize: 12, color: AppColors.textPrimary), child: i.child))),
+          ],
+          onChanged: onChanged,
+          icon: const Icon(Icons.keyboard_arrow_down, size: 16),
+        ),
       ),
     );
   }

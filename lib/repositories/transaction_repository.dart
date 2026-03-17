@@ -37,6 +37,10 @@ class TransactionRepository extends BaseRepository<Transaction> {
     int? purposeId,
     int? expenseSourceId,
     bool? labeled,
+    bool? isAutoLabeled,
+    int? month,
+    int? year,
+    String? orderBy,
     int? limit,
   }) async {
     final conditions = <String>[];
@@ -90,11 +94,23 @@ class TransactionRepository extends BaseRepository<Transaction> {
       conditions.add('labeled = ?');
       args.add(labeled ? 1 : 0);
     }
+    if (isAutoLabeled != null) {
+      conditions.add('is_auto_labeled = ?');
+      args.add(isAutoLabeled ? 1 : 0);
+    }
+    if (month != null) {
+      conditions.add("CAST(substr(transaction_date, 6, 2) AS INTEGER) = ?");
+      args.add(month);
+    }
+    if (year != null) {
+      conditions.add("CAST(substr(transaction_date, 1, 4) AS INTEGER) = ?");
+      args.add(year);
+    }
 
     return query(
       where: conditions.isNotEmpty ? conditions.join(' AND ') : null,
       whereArgs: args.isNotEmpty ? args : null,
-      orderBy: 'transaction_date DESC, created_time DESC',
+      orderBy: orderBy ?? 'transaction_date DESC, created_time DESC',
       limit: limit,
     );
   }
@@ -166,7 +182,7 @@ class TransactionRepository extends BaseRepository<Transaction> {
     final database = await db;
     await database.update(
       '"transaction"',
-      {...fields, 'labeled': 1},
+      {...fields, 'labeled': 1, 'is_auto_labeled': 0},
       where: 'transaction_id = ?',
       whereArgs: [id],
     );
@@ -177,7 +193,7 @@ class TransactionRepository extends BaseRepository<Transaction> {
     final database = await db;
     return database.update(
       '"transaction"',
-      {...fields, 'labeled': 1},
+      {...fields, 'labeled': 1, 'is_auto_labeled': 0},
       where: 'description = ? AND labeled = 0',
       whereArgs: [description],
     );

@@ -6,6 +6,7 @@ import '../../../core/utils/icon_helper.dart';
 import '../../../models/category.dart';
 import '../../../models/sub_category.dart';
 import '../../../services/providers.dart';
+import '../../../core/widgets/icon_picker.dart';
 
 /// Categories & SubCategories CRUD tab.
 /// Displays a list of categories, each expandable to show its subcategories.
@@ -57,8 +58,9 @@ class _CategoriesTabState extends ConsumerState<CategoriesTab> {
 
     final result = await showDialog<bool>(
       context: context,
-      builder: (ctx) => AlertDialog(
-        title: Text(isEdit ? 'Edit Category' : 'Add Category'),
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setDialogState) => AlertDialog(
+          title: Text(isEdit ? 'Edit Category' : 'Add Category'),
         content: SingleChildScrollView(
           child: Column(
             mainAxisSize: MainAxisSize.min,
@@ -69,13 +71,20 @@ class _CategoriesTabState extends ConsumerState<CategoriesTab> {
                 textCapitalization: TextCapitalization.words,
               ),
               const SizedBox(height: 12),
-              TextField(
+              TextFormField(
                 controller: iconCtrl,
+                readOnly: true,
                 decoration: InputDecoration(
-                  labelText: 'Icon Name',
+                  labelText: 'Icon',
                   border: const OutlineInputBorder(),
                   suffixIcon: Icon(IconHelper.getIcon(iconCtrl.text)),
                 ),
+                onTap: () async {
+                  final selected = await IconPicker.show(context, initialIcon: iconCtrl.text);
+                  if (selected != null) {
+                    setDialogState(() => iconCtrl.text = selected);
+                  }
+                },
               ),
               const SizedBox(height: 12),
               TextField(
@@ -99,6 +108,7 @@ class _CategoriesTabState extends ConsumerState<CategoriesTab> {
             child: Text(isEdit ? 'Update' : 'Add'),
           ),
         ],
+      ),
       ),
     );
 
@@ -155,8 +165,9 @@ class _CategoriesTabState extends ConsumerState<CategoriesTab> {
 
     final result = await showDialog<bool>(
       context: context,
-      builder: (ctx) => AlertDialog(
-        title: Text(isEdit ? 'Edit SubCategory' : 'Add SubCategory'),
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setDialogState) => AlertDialog(
+          title: Text(isEdit ? 'Edit SubCategory' : 'Add SubCategory'),
         content: SingleChildScrollView(
           child: Column(
             mainAxisSize: MainAxisSize.min,
@@ -167,13 +178,20 @@ class _CategoriesTabState extends ConsumerState<CategoriesTab> {
                 textCapitalization: TextCapitalization.words,
               ),
               const SizedBox(height: 12),
-              TextField(
+              TextFormField(
                 controller: iconCtrl,
+                readOnly: true,
                 decoration: InputDecoration(
-                  labelText: 'Icon Name',
+                  labelText: 'Icon',
                   border: const OutlineInputBorder(),
                   suffixIcon: Icon(IconHelper.getIcon(iconCtrl.text)),
                 ),
+                onTap: () async {
+                  final selected = await IconPicker.show(context, initialIcon: iconCtrl.text);
+                  if (selected != null) {
+                    setDialogState(() => iconCtrl.text = selected);
+                  }
+                },
               ),
               const SizedBox(height: 12),
               TextField(
@@ -197,6 +215,7 @@ class _CategoriesTabState extends ConsumerState<CategoriesTab> {
             child: Text(isEdit ? 'Update' : 'Add'),
           ),
         ],
+      ),
       ),
     );
 

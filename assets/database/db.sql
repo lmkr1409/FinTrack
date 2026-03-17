@@ -137,6 +137,7 @@ CREATE TABLE IF NOT EXISTS "transaction" (
 	created_time TEXT DEFAULT CURRENT_TIMESTAMP,
 	updated_time TEXT DEFAULT CURRENT_TIMESTAMP,
 	labeled INTEGER NOT NULL DEFAULT 0,
+	is_auto_labeled INTEGER NOT NULL DEFAULT 0,
 	FOREIGN KEY (account_id) REFERENCES account(account_id) ON DELETE SET NULL,
 	FOREIGN KEY (card_id) REFERENCES cards(card_id) ON DELETE SET NULL,
 	FOREIGN KEY (category_id) REFERENCES category(category_id) ON DELETE SET NULL,

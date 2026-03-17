@@ -10,6 +10,9 @@ import 'package:flutter/material.dart';
 class IconHelper {
   IconHelper._();
 
+  /// Exposes the map of all available icons for the IconPicker.
+  static Map<String, IconData> get availableIcons => _iconMap;
+
   static const Map<String, IconData> _iconMap = {
     // ─── General ──────────────────────────────────────────
     'home': Icons.home_rounded,
@@ -101,6 +104,101 @@ class IconHelper {
     'build': Icons.build_rounded,
     'grain': Icons.grain_rounded,
     'house': Icons.house_rounded,
+
+    // ─── Banking & Money ─────────────────────────────────────
+    'currency_rupee': Icons.currency_rupee_rounded,
+    'currency_exchange': Icons.currency_exchange_rounded,
+    'price_check': Icons.price_check_rounded,
+    'request_quote': Icons.request_quote_rounded,
+    'paid': Icons.paid_rounded,
+    'attach_money': Icons.attach_money_rounded,
+    'money': Icons.money_rounded,
+    'monetization_on': Icons.monetization_on_rounded,
+    'wallet': Icons.wallet_rounded,
+    'sell': Icons.sell_rounded,
+
+    // ─── Bills & Subscriptions ───────────────────────────────
+    'receipt': Icons.receipt_rounded,
+    'fact_check': Icons.fact_check_rounded,
+    'calendar_month': Icons.calendar_month_rounded,
+    'event_repeat': Icons.event_repeat_rounded,
+    'subscriptions': Icons.subscriptions_rounded,
+    'confirmation_number': Icons.confirmation_number_rounded,
+
+    // ─── Internet & Communication ────────────────────────────
+    'wifi': Icons.wifi_rounded,
+    'router': Icons.router_rounded,
+    'network_wifi': Icons.network_wifi_rounded,
+    'call': Icons.call_rounded,
+    'mail': Icons.mail_rounded,
+    'chat': Icons.chat_rounded,
+    'notifications': Icons.notifications_rounded,
+
+    // ─── Home Utilities ──────────────────────────────────────
+    'water_drop': Icons.water_drop_rounded,
+    'bathroom': Icons.bathroom_rounded,
+    'power': Icons.power_rounded,
+    'charging_station': Icons.charging_station_rounded,
+    'cleaning_services': Icons.cleaning_services_rounded,
+    'yard': Icons.yard_rounded,
+
+    // ─── Work & Office ───────────────────────────────────────
+    'work': Icons.work_rounded,
+    'business': Icons.business_rounded,
+    'badge': Icons.badge_rounded,
+    'engineering': Icons.engineering_rounded,
+    'groups': Icons.groups_rounded,
+    'handyman': Icons.handyman_rounded,
+
+    // ─── Investments & Assets ────────────────────────────────
+    'trending_up': Icons.trending_up_rounded,
+    'trending_down': Icons.trending_down_rounded,
+    'candlestick_chart': Icons.candlestick_chart_rounded,
+    'query_stats': Icons.query_stats_rounded,
+    'stacked_line_chart': Icons.stacked_line_chart_rounded,
+    'analytics': Icons.analytics_rounded,
+
+    // ─── Property & Assets ───────────────────────────────────
+    'villa': Icons.villa_rounded,
+    'apartment': Icons.apartment_rounded,
+    'garage': Icons.garage_rounded,
+    'foundation': Icons.foundation_rounded,
+    'warehouse': Icons.warehouse_rounded,
+
+    // ─── Travel & Outdoor ────────────────────────────────────
+    'train': Icons.train_rounded,
+    'subway': Icons.subway_rounded,
+    'taxi_alert': Icons.taxi_alert_rounded,
+    'luggage': Icons.luggage_rounded,
+    'beach_access': Icons.beach_access_rounded,
+    'terrain': Icons.terrain_rounded,
+
+    // ─── Lifestyle ───────────────────────────────────────────
+    'sports_soccer': Icons.sports_soccer_rounded,
+    'sports_cricket': Icons.sports_cricket_rounded,
+    'fitness_center': Icons.fitness_center_rounded,
+    'spa': Icons.spa_rounded,
+    'park': Icons.park_rounded,
+
+    // ─── Alerts & Status ─────────────────────────────────────
+    'warning': Icons.warning_rounded,
+    'error': Icons.error_rounded,
+    'check_circle': Icons.check_circle_rounded,
+    'cancel': Icons.cancel_rounded,
+    'info': Icons.info_rounded,
+
+    // ─── Time & Tracking ─────────────────────────────────────
+    'access_time': Icons.access_time_rounded,
+    'timer': Icons.timer_rounded,
+    'update': Icons.update_rounded,
+    'history': Icons.history_rounded,
+
+    // ─── Data & Files ────────────────────────────────────────
+    'folder': Icons.folder_rounded,
+    'insert_drive_file': Icons.insert_drive_file_rounded,
+    'cloud': Icons.cloud_rounded,
+    'backup': Icons.backup_rounded,
+    'storage': Icons.storage_rounded,
   };
 
   /// Returns the [IconData] for the given icon name string.

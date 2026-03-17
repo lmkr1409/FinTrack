@@ -6,6 +6,7 @@ import '../../../core/utils/icon_helper.dart';
 import '../../../models/expense_purpose.dart';
 import '../../../models/expense_source.dart';
 import '../../../services/providers.dart';
+import '../../../core/widgets/icon_picker.dart';
 
 class PurposeSourceTab extends ConsumerStatefulWidget {
   const PurposeSourceTab({super.key});
@@ -50,13 +51,24 @@ class _PurposeSourceTabState extends ConsumerState<PurposeSourceTab> {
 
     final result = await showDialog<bool>(
       context: context,
-      builder: (ctx) => AlertDialog(
-        title: Text(isEdit ? 'Edit Purpose' : 'Add Purpose'),
-        content: SingleChildScrollView(
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setDialogState) => AlertDialog(
+          title: Text(isEdit ? 'Edit Purpose' : 'Add Purpose'),
+          content: SingleChildScrollView(
           child: Column(mainAxisSize: MainAxisSize.min, children: [
             TextField(controller: nameCtrl, decoration: const InputDecoration(labelText: 'Expense For', border: OutlineInputBorder()), textCapitalization: TextCapitalization.words),
             const SizedBox(height: 12),
-            TextField(controller: iconCtrl, decoration: InputDecoration(labelText: 'Icon Name', border: const OutlineInputBorder(), suffixIcon: Icon(IconHelper.getIcon(iconCtrl.text)))),
+            TextFormField(
+              controller: iconCtrl,
+              readOnly: true,
+              decoration: InputDecoration(labelText: 'Icon', border: const OutlineInputBorder(), suffixIcon: Icon(IconHelper.getIcon(iconCtrl.text))),
+              onTap: () async {
+                final selected = await IconPicker.show(context, initialIcon: iconCtrl.text);
+                if (selected != null) {
+                  setDialogState(() => iconCtrl.text = selected);
+                }
+              },
+            ),
             const SizedBox(height: 12),
             TextField(controller: colorCtrl, decoration: InputDecoration(labelText: 'Icon Color (hex)', border: const OutlineInputBorder(), suffixIcon: CircleAvatar(radius: 12, backgroundColor: ColorHelper.fromHex(colorCtrl.text)))),
           ]),
@@ -65,6 +77,7 @@ class _PurposeSourceTabState extends ConsumerState<PurposeSourceTab> {
           TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
           FilledButton(onPressed: () => Navigator.pop(ctx, true), child: Text(isEdit ? 'Update' : 'Add')),
         ],
+      ),
       ),
     );
     if (result != true) return;
@@ -107,13 +120,24 @@ class _PurposeSourceTabState extends ConsumerState<PurposeSourceTab> {
 
     final result = await showDialog<bool>(
       context: context,
-      builder: (ctx) => AlertDialog(
-        title: Text(isEdit ? 'Edit Source' : 'Add Source'),
-        content: SingleChildScrollView(
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setDialogState) => AlertDialog(
+          title: Text(isEdit ? 'Edit Source' : 'Add Source'),
+          content: SingleChildScrollView(
           child: Column(mainAxisSize: MainAxisSize.min, children: [
             TextField(controller: nameCtrl, decoration: const InputDecoration(labelText: 'Source Name', border: OutlineInputBorder()), textCapitalization: TextCapitalization.words),
             const SizedBox(height: 12),
-            TextField(controller: iconCtrl, decoration: InputDecoration(labelText: 'Icon Name', border: const OutlineInputBorder(), suffixIcon: Icon(IconHelper.getIcon(iconCtrl.text)))),
+            TextFormField(
+              controller: iconCtrl,
+              readOnly: true,
+              decoration: InputDecoration(labelText: 'Icon', border: const OutlineInputBorder(), suffixIcon: Icon(IconHelper.getIcon(iconCtrl.text))),
+              onTap: () async {
+                final selected = await IconPicker.show(context, initialIcon: iconCtrl.text);
+                if (selected != null) {
+                  setDialogState(() => iconCtrl.text = selected);
+                }
+              },
+            ),
             const SizedBox(height: 12),
             TextField(controller: colorCtrl, decoration: InputDecoration(labelText: 'Icon Color (hex)', border: const OutlineInputBorder(), suffixIcon: CircleAvatar(radius: 12, backgroundColor: ColorHelper.fromHex(colorCtrl.text)))),
           ]),
@@ -122,6 +146,7 @@ class _PurposeSourceTabState extends ConsumerState<PurposeSourceTab> {
           TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
           FilledButton(onPressed: () => Navigator.pop(ctx, true), child: Text(isEdit ? 'Update' : 'Add')),
         ],
+      ),
       ),
     );
     if (result != true) return;

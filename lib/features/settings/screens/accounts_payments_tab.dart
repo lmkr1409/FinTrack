@@ -7,6 +7,7 @@ import '../../../models/account.dart';
 import '../../../models/card.dart' as model;
 import '../../../models/payment_method.dart';
 import '../../../services/providers.dart';
+import '../../../core/widgets/icon_picker.dart';
 
 /// Accounts, Cards & Payment Methods CRUD tab.
 /// Uses a segmented button to switch between the three views.
@@ -57,15 +58,26 @@ class _AccountsPaymentsTabState extends ConsumerState<AccountsPaymentsTab> {
 
     final result = await showDialog<bool>(
       context: context,
-      builder: (ctx) => AlertDialog(
-        title: Text(isEdit ? 'Edit Account' : 'Add Account'),
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setDialogState) => AlertDialog(
+          title: Text(isEdit ? 'Edit Account' : 'Add Account'),
         content: SingleChildScrollView(
           child: Column(mainAxisSize: MainAxisSize.min, children: [
             TextField(controller: nameCtrl, decoration: const InputDecoration(labelText: 'Account Name', border: OutlineInputBorder()), textCapitalization: TextCapitalization.words),
             const SizedBox(height: 12),
             TextField(controller: balCtrl, decoration: const InputDecoration(labelText: 'Balance', border: OutlineInputBorder()), keyboardType: TextInputType.number),
             const SizedBox(height: 12),
-            TextField(controller: iconCtrl, decoration: InputDecoration(labelText: 'Icon Name', border: const OutlineInputBorder(), suffixIcon: Icon(IconHelper.getIcon(iconCtrl.text)))),
+            TextFormField(
+              controller: iconCtrl,
+              readOnly: true,
+              decoration: InputDecoration(labelText: 'Icon', border: const OutlineInputBorder(), suffixIcon: Icon(IconHelper.getIcon(iconCtrl.text))),
+              onTap: () async {
+                final selected = await IconPicker.show(context, initialIcon: iconCtrl.text);
+                if (selected != null) {
+                  setDialogState(() => iconCtrl.text = selected);
+                }
+              },
+            ),
             const SizedBox(height: 12),
             TextField(controller: colorCtrl, decoration: InputDecoration(labelText: 'Icon Color (hex)', border: const OutlineInputBorder(), suffixIcon: CircleAvatar(radius: 12, backgroundColor: ColorHelper.fromHex(colorCtrl.text)))),
           ]),
@@ -74,6 +86,7 @@ class _AccountsPaymentsTabState extends ConsumerState<AccountsPaymentsTab> {
           TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
           FilledButton(onPressed: () => Navigator.pop(ctx, true), child: Text(isEdit ? 'Update' : 'Add')),
         ],
+      ),
       ),
     );
     if (result != true) return;
@@ -153,7 +166,17 @@ class _AccountsPaymentsTabState extends ConsumerState<AccountsPaymentsTab> {
                 onChanged: (v) => setDialogState(() => selectedAccountId = v),
               ),
               const SizedBox(height: 12),
-              TextField(controller: iconCtrl, decoration: InputDecoration(labelText: 'Icon Name', border: const OutlineInputBorder(), suffixIcon: Icon(IconHelper.getIcon(iconCtrl.text)))),
+              TextFormField(
+                controller: iconCtrl,
+                readOnly: true,
+                decoration: InputDecoration(labelText: 'Icon', border: const OutlineInputBorder(), suffixIcon: Icon(IconHelper.getIcon(iconCtrl.text))),
+                onTap: () async {
+                  final selected = await IconPicker.show(context, initialIcon: iconCtrl.text);
+                  if (selected != null) {
+                    setDialogState(() => iconCtrl.text = selected);
+                  }
+                },
+              ),
               const SizedBox(height: 12),
               TextField(controller: colorCtrl, decoration: InputDecoration(labelText: 'Icon Color (hex)', border: const OutlineInputBorder(), suffixIcon: CircleAvatar(radius: 12, backgroundColor: ColorHelper.fromHex(colorCtrl.text)))),
             ]),
@@ -205,13 +228,24 @@ class _AccountsPaymentsTabState extends ConsumerState<AccountsPaymentsTab> {
 
     final result = await showDialog<bool>(
       context: context,
-      builder: (ctx) => AlertDialog(
-        title: Text(isEdit ? 'Edit Payment Method' : 'Add Payment Method'),
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setDialogState) => AlertDialog(
+          title: Text(isEdit ? 'Edit Payment Method' : 'Add Payment Method'),
         content: SingleChildScrollView(
           child: Column(mainAxisSize: MainAxisSize.min, children: [
             TextField(controller: nameCtrl, decoration: const InputDecoration(labelText: 'Method Name', border: OutlineInputBorder()), textCapitalization: TextCapitalization.words),
             const SizedBox(height: 12),
-            TextField(controller: iconCtrl, decoration: InputDecoration(labelText: 'Icon Name', border: const OutlineInputBorder(), suffixIcon: Icon(IconHelper.getIcon(iconCtrl.text)))),
+            TextFormField(
+              controller: iconCtrl,
+              readOnly: true,
+              decoration: InputDecoration(labelText: 'Icon', border: const OutlineInputBorder(), suffixIcon: Icon(IconHelper.getIcon(iconCtrl.text))),
+              onTap: () async {
+                final selected = await IconPicker.show(context, initialIcon: iconCtrl.text);
+                if (selected != null) {
+                  setDialogState(() => iconCtrl.text = selected);
+                }
+              },
+            ),
             const SizedBox(height: 12),
             TextField(controller: colorCtrl, decoration: InputDecoration(labelText: 'Icon Color (hex)', border: const OutlineInputBorder(), suffixIcon: CircleAvatar(radius: 12, backgroundColor: ColorHelper.fromHex(colorCtrl.text)))),
           ]),
@@ -220,6 +254,7 @@ class _AccountsPaymentsTabState extends ConsumerState<AccountsPaymentsTab> {
           TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
           FilledButton(onPressed: () => Navigator.pop(ctx, true), child: Text(isEdit ? 'Update' : 'Add')),
         ],
+      ),
       ),
     );
     if (result != true) return;

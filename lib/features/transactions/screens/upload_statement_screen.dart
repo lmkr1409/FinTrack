@@ -9,6 +9,7 @@ import '../../../models/card.dart' as model;
 import '../../../models/transaction.dart';
 import '../../../services/providers.dart';
 import '../../../services/statement_parser.dart';
+import '../../../services/labeling_rules_service.dart';
 import '../../../widgets/glass_card.dart';
 
 /// Screen to upload and import a bank statement file.
@@ -163,8 +164,20 @@ class _UploadStatementScreenState extends ConsumerState<UploadStatementScreen> {
       final transactions = _parsed!.map((p) {
         // Convert Credit Card payments (Credits) into Transfers so they aren't marked as Income
         String type = p.transactionType;
-        if (_cardTypeForParser == 'credit' && type == 'CREDIT') {
-          type = 'TRANSFER';
+        if (type == 'CREDIT') {
+          if (_cardTypeForParser == 'credit') {
+             // For credit card statements, incoming money (CREDIT) is typically a payment -> TRANSFER
+             type = 'TRANSFER';
+          } else {
+             // For debit/account statements, money in is typically Income (CREDIT).
+             // Let's explicitly check if it's a credit card payment from the account, or self transfer,
+             // and if not, leave it as CREDIT (Income).
+             final descLower = p.description.toLowerCase();
+             if (descLower.contains('cr card') || descLower.contains('credit card') || 
+                 descLower.contains('to own a/c') || descLower.contains('to own account')) {
+               type = 'TRANSFER';
+             }
+          }
         }
 
         // Try to map parsed Card Name
@@ -192,7 +205,7 @@ class _UploadStatementScreenState extends ConsumerState<UploadStatementScreen> {
           }
         }
 
-        return Transaction(
+        final txn = Transaction(
           transactionType: type,
           amount: p.amount,
           transactionDate: p.date,
@@ -204,6 +217,7 @@ class _UploadStatementScreenState extends ConsumerState<UploadStatementScreen> {
           updatedTime: now,
           labeled: false,
         );
+        return LabelingRulesService.applyRules(txn);
       }).toList();
 
       await txnRepo.insertBatch(transactions);
@@ -246,7 +260,8 @@ class _UploadStatementScreenState extends ConsumerState<UploadStatementScreen> {
         children: [
           // ─── Bank ───────────────────────────────────
           DropdownButtonFormField<String>(
-            value: _selectedBank,
+            key: ValueKey('bank_$_selectedBank'),
+            initialValue: _selectedBank,
             decoration: const InputDecoration(
               labelText: 'Bank',
               border: OutlineInputBorder(),
@@ -264,7 +279,8 @@ class _UploadStatementScreenState extends ConsumerState<UploadStatementScreen> {
 
           // ─── Card ───────────────────────────────────
           DropdownButtonFormField<int?>(
-            value: (_selectedCardId != null && _filteredCards.any((c) => c.id == _selectedCardId)) 
+            key: ValueKey('card_$_selectedCardId'),
+            initialValue: (_selectedCardId != null && _filteredCards.any((c) => c.id == _selectedCardId)) 
                 ? _selectedCardId 
                 : null,
             decoration: const InputDecoration(
