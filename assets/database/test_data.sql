@@ -48,58 +48,75 @@ VALUES
  (SELECT payment_method_id FROM payment_method WHERE payment_method_name='CARD'));
 
 WITH RECURSIVE seq(n) AS (
-    SELECT 1
-    UNION ALL
-    SELECT n + 1 FROM seq WHERE n < 720
+  SELECT 1
+  UNION ALL
+  SELECT n + 1 FROM seq WHERE n < 920
 )
 
 INSERT INTO "transaction" (
-    transaction_type,
-    amount,
-    transaction_date,
-    description,
-    expense_source_id,
-    labeled,
-    created_time,
-    updated_time
+transaction_type,
+amount,
+transaction_date,
+description,
+category_id,
+subcategory_id,
+purpose_id,
+account_id,
+merchant_id,
+payment_method_id,
+expense_source_id,
+labeled,
+created_time,
+updated_time
 )
 
 SELECT
 
 CASE
-WHEN n % 45 = 0 THEN 'CREDIT'
+WHEN n % 40 = 0 THEN 'CREDIT'
 ELSE 'DEBIT'
 END,
 
 CASE
-WHEN n % 45 = 0 THEN 75000
-WHEN n % 12 = 0 THEN (ABS(RANDOM()) % 4000) + 500
-WHEN n % 7 = 0 THEN (ABS(RANDOM()) % 1500) + 200
-ELSE (ABS(RANDOM()) % 500) + 50
+WHEN n % 40 = 0 THEN 75000
+WHEN n % 10 = 0 THEN (ABS(RANDOM())%3000)+500
+WHEN n % 5 = 0 THEN (ABS(RANDOM())%800)+200
+ELSE (ABS(RANDOM())%400)+50
 END,
 
-DATE('2025-09-01', '+' || (ABS(RANDOM()) % 240) || ' days'),
+DATE(
+  '2025-05-01',
+  '+' || (ABS(RANDOM()) % (
+    julianday('now') - julianday('2025-05-01')
+  )) || ' days'
+),
 
 CASE
-WHEN n % 45 = 0 THEN 'NEFT-SALARY-TCS'
-WHEN n % 20 = 0 THEN 'ACH-HDFC MUTUAL FUND SIP'
-WHEN n % 18 = 0 THEN 'UPI-AMAZON PAY'
-WHEN n % 15 = 0 THEN 'UPI-UBER INDIA'
-WHEN n % 14 = 0 THEN 'UPI-SWIGGY'
-WHEN n % 12 = 0 THEN 'POS-INDIAN OIL PETROL'
-WHEN n % 10 = 0 THEN 'UPI-DMART'
-WHEN n % 9 = 0 THEN 'UPI-BIGBASKET'
-WHEN n % 8 = 0 THEN 'UPI-NETFLIX'
-WHEN n % 7 = 0 THEN 'UPI-ZOMATO'
-WHEN n % 6 = 0 THEN 'UPI-AIRTEL BILL'
-WHEN n % 5 = 0 THEN 'UPI-ACT FIBERNET'
-WHEN n % 4 = 0 THEN 'UPI-LOCAL KIRANA STORE'
-ELSE 'UPI-MERCHANT PAYMENT'
+WHEN n % 40 = 0 THEN 'Salary Credit'
+WHEN n % 12 = 0 THEN 'Monthly SIP'
+WHEN n % 8 = 0 THEN 'Amazon Purchase'
+WHEN n % 7 = 0 THEN 'Uber Ride'
+WHEN n % 6 = 0 THEN 'Swiggy Order'
+WHEN n % 5 = 0 THEN 'Petrol'
+WHEN n % 4 = 0 THEN 'Groceries'
+ELSE 'Daily Expense'
 END,
+
+(SELECT category_id FROM category ORDER BY RANDOM() LIMIT 1),
+
+(SELECT subcategory_id FROM sub_category ORDER BY RANDOM() LIMIT 1),
+
+(SELECT purpose_id FROM expense_purpose ORDER BY RANDOM() LIMIT 1),
+
+(SELECT account_id FROM account ORDER BY RANDOM() LIMIT 1),
+
+(SELECT merchant_id FROM merchant ORDER BY RANDOM() LIMIT 1),
+
+(SELECT payment_method_id FROM payment_method ORDER BY RANDOM() LIMIT 1),
 
 (SELECT expense_source_id FROM expense_source WHERE expense_source_name='BANK_STATEMENT'),
 
-0,
+1,
 
 CURRENT_TIMESTAMP,
 CURRENT_TIMESTAMP

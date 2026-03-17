@@ -139,7 +139,22 @@ class TransactionRepository extends BaseRepository<Transaction> {
     final database = await db;
     final batch = database.batch();
     for (final txn in transactions) {
-      batch.insert('transaction', txn.toMap());
+      batch.insert('"transaction"', txn.toMap());
+    }
+    await batch.commit(noResult: true);
+  }
+
+  /// Bulk-update a list of transactions using a database batch.
+  Future<void> updateBatch(List<Transaction> transactions) async {
+    final database = await db;
+    final batch = database.batch();
+    for (final txn in transactions) {
+      batch.update(
+        '"transaction"',
+        txn.toMap(),
+        where: 'transaction_id = ?',
+        whereArgs: [txn.id],
+      );
     }
     await batch.commit(noResult: true);
   }

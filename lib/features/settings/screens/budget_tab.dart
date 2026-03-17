@@ -86,21 +86,12 @@ class _BudgetTabState extends ConsumerState<BudgetTab> {
     }
 
     return Scaffold(
-      body: Column(
-        children: [
-          SafeArea(
-            bottom: false,
-            child: MonthSwiper(
-              currentMonth: _selectedMonth,
-              onMonthChanged: (newMonth) {
-                setState(() => _selectedMonth = newMonth);
-              },
-            ),
-          ),
-          Expanded(
-            child: _buildCategoriesList(cs),
-          ),
-        ],
+      body: MonthSwiper(
+        currentMonth: _selectedMonth,
+        onMonthChanged: (newMonth) {
+          setState(() => _selectedMonth = newMonth);
+        },
+        child: _buildCategoriesList(cs),
       ),
     );
   }

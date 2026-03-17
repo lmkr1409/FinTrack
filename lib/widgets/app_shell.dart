@@ -1,11 +1,14 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../core/theme/app_colors.dart';
 import '../features/dashboard/screens/insights_screen.dart';
 import '../features/labeling/screens/label_screen.dart';
+import '../features/labeling/screens/labeling_rules_screen.dart';
 import '../features/settings/screens/configuration_screen.dart';
 import '../features/settings/screens/export_import_screen.dart';
 import '../features/transactions/screens/transactions_screen.dart';
+import '../services/labeling_rules_service.dart';
 
 /// Root widget: Material 3 Navigation Drawer with themed gradient header.
 class AppShell extends StatefulWidget {
@@ -18,10 +21,11 @@ class AppShell extends StatefulWidget {
 class _AppShellState extends State<AppShell> {
   int _selectedIndex = 0;
 
-  static const _titles = ['Insights', 'Configuration', 'Transactions', 'Label', 'Backup & Restore'];
+  static const _titles = ['Insights', 'Configuration', 'Labeling Rules', 'Transactions', 'Label', 'Backup & Restore'];
   static const _screens = <Widget>[
     InsightsScreen(),
     ConfigurationScreen(),
+    LabelingRulesScreen(),
     TransactionsScreen(),
     LabelScreen(),
     ExportImportScreen(),
@@ -38,6 +42,16 @@ class _AppShellState extends State<AppShell> {
             onPressed: () => Scaffold.of(ctx).openDrawer(),
           ),
         ),
+        actions: [
+          if (_selectedIndex == 2)
+            Consumer(
+              builder: (context, ref, _) => IconButton(
+                icon: const Icon(Icons.playlist_add_check_rounded),
+                tooltip: 'Apply Rules',
+                onPressed: () => LabelingRulesService.promptAndApplyRules(context, ref),
+              ),
+            ),
+        ],
       ),
       drawer: NavigationDrawer(
         selectedIndex: _selectedIndex,
@@ -76,6 +90,11 @@ class _AppShellState extends State<AppShell> {
             icon: Icon(Icons.settings_outlined),
             selectedIcon: Icon(Icons.settings_rounded),
             label: Text('Configuration'),
+          ),
+          const NavigationDrawerDestination(
+            icon: Icon(Icons.rule_outlined),
+            selectedIcon: Icon(Icons.rule_rounded),
+            label: Text('Labeling Rules'),
           ),
           const NavigationDrawerDestination(
             icon: Icon(Icons.receipt_long_outlined),

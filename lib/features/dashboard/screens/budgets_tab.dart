@@ -35,22 +35,13 @@ class _BudgetsTabState extends State<BudgetsTab> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: Column(
-        children: [
-          SafeArea(
-            bottom: false,
-            child: MonthSwiper(
-              currentMonth: _selectedMonth,
-              onMonthChanged: (newMonth) {
-                setState(() => _selectedMonth = newMonth);
-                _loadData();
-              },
-            ),
-          ),
-          Expanded(
-            child: _buildContent(),
-          ),
-        ],
+      body: MonthSwiper(
+        currentMonth: _selectedMonth,
+        onMonthChanged: (newMonth) {
+          setState(() => _selectedMonth = newMonth);
+          _loadData();
+        },
+        child: _buildContent(),
       ),
     );
   }

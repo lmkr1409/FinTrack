@@ -4,6 +4,7 @@ import 'package:intl/intl.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../services/analytics_service.dart';
 import '../../../widgets/glass_card.dart';
+import '../../../widgets/month_swiper.dart';
 
 /// Insights tab — smart spending suggestions in glassmorphic cards.
 class InsightsSummaryTab extends StatefulWidget {
@@ -17,6 +18,8 @@ class _InsightsSummaryTabState extends State<InsightsSummaryTab> {
   final _analytics = AnalyticsService();
   bool _loading = true;
   final List<_Insight> _insights = [];
+  
+  DateTime _selectedMonth = DateTime(DateTime.now().year, DateTime.now().month);
 
   @override
   void initState() { super.initState(); _generateInsights(); }
@@ -24,13 +27,13 @@ class _InsightsSummaryTabState extends State<InsightsSummaryTab> {
   Future<void> _generateInsights() async {
     setState(() { _loading = true; _insights.clear(); });
     final now = DateTime.now();
-    final start = DateFormat('yyyy-MM-dd').format(DateTime(now.year, now.month, 1));
-    final end = DateFormat('yyyy-MM-dd').format(DateTime(now.year, now.month + 1, 0));
+    final start = DateFormat('yyyy-MM-dd').format(DateTime(_selectedMonth.year, _selectedMonth.month, 1));
+    final end = DateFormat('yyyy-MM-dd').format(DateTime(_selectedMonth.year, _selectedMonth.month + 1, 0));
 
     final totalExpense = await _analytics.totalByType('DEBIT', start, end);
     final totalIncome = await _analytics.totalByType('CREDIT', start, end);
     final topCats = await _analytics.topCategories(start, end, limit: 3);
-    final budgets = await _analytics.budgetVsActual(now.month, now.year);
+    final budgets = await _analytics.budgetVsActual(_selectedMonth.month, _selectedMonth.year);
 
     if (totalIncome > 0) {
       final ratio = totalExpense / totalIncome;
@@ -64,7 +67,7 @@ class _InsightsSummaryTabState extends State<InsightsSummaryTab> {
         body: 'Start logging your transactions to get personalized insights.'));
     }
 
-    if (totalExpense > 0) {
+    if (totalExpense > 0 && _selectedMonth.year == now.year && _selectedMonth.month == now.month) {
       final dailyAvg = totalExpense / now.day;
       final projected = dailyAvg * DateTime(now.year, now.month + 1, 0).day;
       _insights.add(_Insight(icon: Icons.trending_up_rounded, color: AppColors.info, title: 'Projected Monthly Spend',
@@ -76,6 +79,19 @@ class _InsightsSummaryTabState extends State<InsightsSummaryTab> {
 
   @override
   Widget build(BuildContext context) {
+    return Scaffold(
+      body: MonthSwiper(
+        currentMonth: _selectedMonth,
+        onMonthChanged: (newMonth) {
+          setState(() => _selectedMonth = newMonth);
+          _generateInsights();
+        },
+        child: _buildContent(),
+      ),
+    );
+  }
+
+  Widget _buildContent() {
     if (_loading) return const Center(child: CircularProgressIndicator());
     if (_insights.isEmpty) return Center(child: Text('No insights available yet.', style: TextStyle(color: AppColors.textMuted)));
 

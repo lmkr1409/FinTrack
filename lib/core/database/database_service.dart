@@ -47,6 +47,34 @@ class DatabaseService {
       // Version 2 adds is_auto_labeled column to transaction table
       await db.execute('ALTER TABLE "transaction" ADD COLUMN is_auto_labeled INTEGER NOT NULL DEFAULT 0');
     }
+    if (oldVersion < 3) {
+      // Version 3 adds labeling_rule table
+      await db.execute('''
+        CREATE TABLE IF NOT EXISTS labeling_rule (
+          rule_id INTEGER PRIMARY KEY AUTOINCREMENT,
+          keyword TEXT NOT NULL,
+          transaction_type TEXT,
+          category_id INTEGER,
+          subcategory_id INTEGER,
+          merchant_id INTEGER,
+          payment_method_id INTEGER,
+          expense_source_id INTEGER,
+          purpose_id INTEGER,
+          account_id INTEGER,
+          card_id INTEGER,
+          created_time TEXT DEFAULT CURRENT_TIMESTAMP,
+          updated_time TEXT DEFAULT CURRENT_TIMESTAMP,
+          FOREIGN KEY (category_id) REFERENCES category(category_id) ON DELETE SET NULL,
+          FOREIGN KEY (subcategory_id) REFERENCES sub_category(subcategory_id) ON DELETE SET NULL,
+          FOREIGN KEY (merchant_id) REFERENCES merchant(merchant_id) ON DELETE SET NULL,
+          FOREIGN KEY (payment_method_id) REFERENCES payment_method(payment_method_id) ON DELETE SET NULL,
+          FOREIGN KEY (expense_source_id) REFERENCES expense_source(expense_source_id) ON DELETE SET NULL,
+          FOREIGN KEY (purpose_id) REFERENCES expense_purpose(purpose_id) ON DELETE SET NULL,
+          FOREIGN KEY (account_id) REFERENCES account(account_id) ON DELETE SET NULL,
+          FOREIGN KEY (card_id) REFERENCES cards(card_id) ON DELETE SET NULL
+        )
+      ''');
+    }
   }
 
   /// Reads and executes the SQL schema/seed file from assets.

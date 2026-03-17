@@ -16,6 +16,26 @@ class AnalyticsService {
     return (r.first['total'] as num?)?.toDouble() ?? 0;
   }
 
+  Future<int> transactionCount(String start, String end) async {
+    final db = await _db.database;
+    final r = await db.rawQuery(
+      'SELECT COUNT(*) as count FROM "transaction" '
+      'WHERE transaction_date>=? AND transaction_date<=?',
+      [start, end],
+    );
+    return (r.first['count'] as num?)?.toInt() ?? 0;
+  }
+
+  Future<double> largestExpense(String start, String end) async {
+    final db = await _db.database;
+    final r = await db.rawQuery(
+      'SELECT COALESCE(MAX(amount),0) as max_amount FROM "transaction" '
+      'WHERE transaction_type=\'DEBIT\' AND transaction_date>=? AND transaction_date<=?',
+      [start, end],
+    );
+    return (r.first['max_amount'] as num?)?.toDouble() ?? 0;
+  }
+
   // ─── Top-N queries ──────────────────────────────────────
 
   Future<List<Map<String, dynamic>>> topCategories(String start, String end, {int limit = 5}) async {
@@ -139,6 +159,75 @@ class AnalyticsService {
   }
 
   // ─── Budget vs Actual ───────────────────────────────────
+
+  Future<Map<String, dynamic>> getLast12MonthsBudgetStats() async {
+    final db = await _db.database;
+    final now = DateTime.now();
+    final startOfCurrentMonth = DateTime(now.year, now.month, 1);
+    final twelveMonthsAgo = DateTime(startOfCurrentMonth.year, startOfCurrentMonth.month - 11, 1);
+    
+    // Total budget over last 12 months
+    final budgetQuery = await db.rawQuery('''
+      SELECT year, month, COALESCE(SUM(budget_amount), 0) as total_budget
+      FROM budget
+      WHERE budget_frequency='MONTHLY' 
+      AND (year * 12 + month) >= ? 
+      AND (year * 12 + month) <= ?
+      GROUP BY year, month
+    ''', [
+      twelveMonthsAgo.year * 12 + twelveMonthsAgo.month, 
+      startOfCurrentMonth.year * 12 + startOfCurrentMonth.month
+    ]);
+
+    Map<String, double> monthlyBudgets = {};
+    for (var r in budgetQuery) {
+      final y = r['year'] as int;
+      final m = r['month'] as int;
+      monthlyBudgets['$y-${m.toString().padLeft(2, '0')}'] = (r['total_budget'] as num).toDouble();
+    }
+
+    final startStr = '${twelveMonthsAgo.year}-${twelveMonthsAgo.month.toString().padLeft(2, '0')}-01';
+    final expenseQuery = await db.rawQuery('''
+      SELECT substr(transaction_date, 1, 7) as period, COALESCE(SUM(amount), 0) as total_expense
+      FROM "transaction"
+      WHERE transaction_type='DEBIT' AND transaction_date >= ?
+      GROUP BY period
+    ''', [startStr]);
+
+    Map<String, double> monthlyExpenses = {};
+    for (var r in expenseQuery) {
+      monthlyExpenses[r['period'] as String] = (r['total_expense'] as num).toDouble();
+    }
+
+    double totalBudgetSum = 0;
+    int overBudgetMonths = 0;
+    double totalUtilizationSum = 0;
+    int budgetMonthsCount = 0;
+
+    for (int i = 0; i < 12; i++) {
+        int year = twelveMonthsAgo.year + (twelveMonthsAgo.month - 1 + i) ~/ 12;
+        int month = (twelveMonthsAgo.month - 1 + i) % 12 + 1;
+        String period = '$year-${month.toString().padLeft(2, '0')}';
+
+        double budget = monthlyBudgets[period] ?? 0.0;
+        double expense = monthlyExpenses[period] ?? 0.0;
+
+        totalBudgetSum += budget;
+        if (budget > 0) {
+            budgetMonthsCount++;
+            totalUtilizationSum += (expense / budget);
+            if (expense > budget) {
+                overBudgetMonths++;
+            }
+        }
+    }
+
+    return {
+        'avgMonthlyBudget': totalBudgetSum / 12,
+        'overBudgetMonths': overBudgetMonths,
+        'averageUtilization': budgetMonthsCount > 0 ? (totalUtilizationSum / budgetMonthsCount) * 100 : 0.0,
+    };
+  }
 
   Future<List<Map<String, dynamic>>> budgetVsActual(int month, int year) async {
     final db = await _db.database;
