@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:intl/intl.dart';
 
 import '../../../core/utils/color_helper.dart';
 import '../../../core/utils/icon_helper.dart';
@@ -20,8 +21,12 @@ class _BudgetTabState extends ConsumerState<BudgetTab> {
   List<Budget> _budgets = [];
   List<Category> _categories = [];
   bool _loading = true;
+  bool _isSaving = false;
 
   DateTime _selectedMonth = DateTime(DateTime.now().year, DateTime.now().month);
+  
+  // Local state for the text fields. Key: Category ID, Value: Input string
+  final Map<int, String> _budgetInputs = {};
 
   @override
   void initState() {
@@ -33,11 +38,23 @@ class _BudgetTabState extends ConsumerState<BudgetTab> {
     setState(() => _loading = true);
     final budgets = await ref.read(budgetRepositoryProvider).getAllSorted();
     final categories = await ref.read(categoryRepositoryProvider).getAllSorted();
+    
+    _populateLocalInputs(budgets, _selectedMonth.month, _selectedMonth.year);
+    
     setState(() {
       _budgets = budgets;
       _categories = categories;
       _loading = false;
     });
+  }
+
+  void _populateLocalInputs(List<Budget> budgets, int month, int year) {
+    _budgetInputs.clear();
+    for (final b in budgets) {
+      if (b.categoryId != null && b.budgetFrequency == 'MONTHLY' && b.month == month && b.year == year) {
+        _budgetInputs[b.categoryId!] = b.budgetAmount > 0 ? b.budgetAmount.toStringAsFixed(0) : '';
+      }
+    }
   }
 
   Budget? _getBudgetForCategory(int categoryId) {
@@ -49,32 +66,51 @@ class _BudgetTabState extends ConsumerState<BudgetTab> {
     ).firstOrNull;
   }
 
-  Future<void> _saveBudget(int categoryId, String value, Budget? existingBudget) async {
-    final amount = double.tryParse(value) ?? 0.0;
+  Future<void> _saveAllBudgets() async {
+    setState(() => _isSaving = true);
     final repo = ref.read(budgetRepositoryProvider);
 
-    if (amount <= 0) {
-      if (existingBudget != null && existingBudget.id != null) {
-        // Amount is 0 or invalid, delete existing budget for this month
-        await repo.deleteBudget(existingBudget.id!);
-      }
-    } else {
-      if (existingBudget != null) {
-        // Update
-        await repo.updateBudget(existingBudget.copyWith(budgetAmount: amount));
+    for (final cat in _categories) {
+      final inputVal = _budgetInputs[cat.id!] ?? '';
+      final amount = double.tryParse(inputVal) ?? 0.0;
+      final existingBudget = _getBudgetForCategory(cat.id!);
+
+      if (amount <= 0) {
+        if (existingBudget != null && existingBudget.id != null) {
+          await repo.deleteBudget(existingBudget.id!);
+        }
       } else {
-        // Insert
-        await repo.insertBudget(Budget(
-          categoryId: categoryId,
-          budgetAmount: amount,
-          budgetFrequency: 'MONTHLY',
-          month: _selectedMonth.month,
-          year: _selectedMonth.year,
-        ));
+        if (existingBudget != null) {
+          await repo.updateBudget(existingBudget.copyWith(budgetAmount: amount));
+        } else {
+          await repo.insertBudget(Budget(
+            categoryId: cat.id!,
+            budgetAmount: amount,
+            budgetFrequency: 'MONTHLY',
+            month: _selectedMonth.month,
+            year: _selectedMonth.year,
+          ));
+        }
       }
     }
-    // Refresh to reflect actual saved state without blocking UI unnecessarily
     await _loadData();
+    setState(() => _isSaving = false);
+    
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text('Budgets saved for ${DateFormat('MMMM yyyy').format(_selectedMonth)}'),
+        backgroundColor: Colors.green,
+      ));
+    }
+  }
+  
+  void _copyPreviousMonth() {
+    final prevMonth = DateTime(_selectedMonth.year, _selectedMonth.month - 1);
+    _populateLocalInputs(_budgets, prevMonth.month, prevMonth.year);
+    setState(() {}); // Re-render the fields with copied values
+    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+      content: Text('Values copied from previous month. Click Save to persist.'),
+    ));
   }
 
   @override
@@ -86,12 +122,38 @@ class _BudgetTabState extends ConsumerState<BudgetTab> {
     }
 
     return Scaffold(
-      body: MonthSwiper(
-        currentMonth: _selectedMonth,
-        onMonthChanged: (newMonth) {
-          setState(() => _selectedMonth = newMonth);
-        },
-        child: _buildCategoriesList(cs),
+      body: Stack(
+        children: [
+          MonthSwiper(
+            currentMonth: _selectedMonth,
+            onMonthChanged: (newMonth) {
+              setState(() {
+                _selectedMonth = newMonth;
+                _populateLocalInputs(_budgets, _selectedMonth.month, _selectedMonth.year);
+              });
+            },
+            actions: [
+              IconButton(
+                icon: const Icon(Icons.copy_rounded, color: Colors.white70),
+                tooltip: 'Copy Previous Month',
+                onPressed: _loading || _isSaving ? null : _copyPreviousMonth,
+              ),
+              IconButton(
+                icon: const Icon(Icons.check_circle_rounded, color: Colors.white),
+                tooltip: 'Save Budgets',
+                onPressed: _loading || _isSaving ? null : _saveAllBudgets,
+              ),
+            ],
+            child: _buildCategoriesList(cs),
+          ),
+          if (_isSaving)
+            Positioned.fill(
+              child: Container(
+                color: Colors.black45,
+                child: const Center(child: CircularProgressIndicator()),
+              ),
+            ),
+        ],
       ),
     );
   }
@@ -106,11 +168,9 @@ class _BudgetTabState extends ConsumerState<BudgetTab> {
       itemCount: _categories.length,
       itemBuilder: (context, i) {
         final cat = _categories[i];
-        final existingBudget = _getBudgetForCategory(cat.id!);
+        if (cat.id == null) return const SizedBox.shrink();
         
-        final initialNum = existingBudget?.budgetAmount ?? 0.0;
-        final initialText = initialNum > 0 ? initialNum.toStringAsFixed(0) : '';
-
+        final existingBudget = _getBudgetForCategory(cat.id!);
         return GlassCard(
           margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
           child: Padding(
@@ -128,7 +188,8 @@ class _BudgetTabState extends ConsumerState<BudgetTab> {
                 SizedBox(
                   width: 100,
                   child: TextFormField(
-                    initialValue: initialText,
+                    key: ValueKey('${_selectedMonth.year}_${_selectedMonth.month}_${cat.id!}'),
+                    initialValue: _budgetInputs[cat.id!] ?? '',
                     keyboardType: TextInputType.number,
                     textAlign: TextAlign.right,
                     style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
@@ -146,7 +207,17 @@ class _BudgetTabState extends ConsumerState<BudgetTab> {
                       isDense: true,
                       contentPadding: const EdgeInsets.symmetric(vertical: 8),
                     ),
-                    onFieldSubmitted: (val) => _saveBudget(cat.id!, val, existingBudget),
+                    onChanged: (val) {
+                      _budgetInputs[cat.id!] = val;
+                      // Show an indicator on the UI if it differs from DB
+                      final dbVal = existingBudget?.budgetAmount ?? 0.0;
+                      final inputNum = double.tryParse(val) ?? 0.0;
+                      if (dbVal != inputNum) {
+                          // The 'Save' button already handles persistence, we don't auto-save anymore.
+                          // Could change input border color if modified to show "unsaved" state if needed.
+                      }
+                    },
+                    textInputAction: TextInputAction.next,
                   ),
                 ),
               ],

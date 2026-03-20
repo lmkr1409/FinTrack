@@ -53,7 +53,12 @@ class _CategoriesTabState extends ConsumerState<CategoriesTab> {
   Future<void> _showCategoryDialog({Category? category}) async {
     final nameCtrl = TextEditingController(text: category?.categoryName ?? '');
     final iconCtrl = TextEditingController(text: category?.icon ?? '');
-    final colorCtrl = TextEditingController(text: category?.iconColor ?? '#607D8B');
+    final colorCtrl = TextEditingController(
+      text: category?.iconColor ?? '#607D8B',
+    );
+    final priorityCtrl = TextEditingController(
+      text: category?.priority?.toString() ?? '99',
+    );
     final isEdit = category != null;
 
     final result = await showDialog<bool>(
@@ -61,54 +66,72 @@ class _CategoriesTabState extends ConsumerState<CategoriesTab> {
       builder: (ctx) => StatefulBuilder(
         builder: (ctx, setDialogState) => AlertDialog(
           title: Text(isEdit ? 'Edit Category' : 'Add Category'),
-        content: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              TextField(
-                controller: nameCtrl,
-                decoration: const InputDecoration(labelText: 'Category Name', border: OutlineInputBorder()),
-                textCapitalization: TextCapitalization.words,
-              ),
-              const SizedBox(height: 12),
-              TextFormField(
-                controller: iconCtrl,
-                readOnly: true,
-                decoration: InputDecoration(
-                  labelText: 'Icon',
-                  border: const OutlineInputBorder(),
-                  suffixIcon: Icon(IconHelper.getIcon(iconCtrl.text)),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextField(
+                  controller: nameCtrl,
+                  decoration: const InputDecoration(
+                    labelText: 'Category Name',
+                    border: OutlineInputBorder(),
+                  ),
+                  textCapitalization: TextCapitalization.words,
                 ),
-                onTap: () async {
-                  final selected = await IconPicker.show(context, initialIcon: iconCtrl.text);
-                  if (selected != null) {
-                    setDialogState(() => iconCtrl.text = selected);
-                  }
-                },
-              ),
-              const SizedBox(height: 12),
-              TextField(
-                controller: colorCtrl,
-                decoration: InputDecoration(
-                  labelText: 'Icon Color (hex)',
-                  border: const OutlineInputBorder(),
-                  suffixIcon: CircleAvatar(
-                    radius: 12,
-                    backgroundColor: ColorHelper.fromHex(colorCtrl.text),
+                const SizedBox(height: 12),
+                TextFormField(
+                  controller: iconCtrl,
+                  readOnly: true,
+                  decoration: InputDecoration(
+                    labelText: 'Icon',
+                    border: const OutlineInputBorder(),
+                    suffixIcon: Icon(IconHelper.getIcon(iconCtrl.text)),
+                  ),
+                  onTap: () async {
+                    final selected = await IconPicker.show(
+                      context,
+                      initialIcon: iconCtrl.text,
+                    );
+                    if (selected != null) {
+                      setDialogState(() => iconCtrl.text = selected);
+                    }
+                  },
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: colorCtrl,
+                  decoration: InputDecoration(
+                    labelText: 'Icon Color (hex)',
+                    border: const OutlineInputBorder(),
+                    suffixIcon: CircleAvatar(
+                      radius: 12,
+                      backgroundColor: ColorHelper.fromHex(colorCtrl.text),
+                    ),
                   ),
                 ),
-              ),
-            ],
+                const SizedBox(height: 12),
+                TextField(
+                  controller: priorityCtrl,
+                  keyboardType: TextInputType.number,
+                  decoration: const InputDecoration(
+                    labelText: 'Priority (Lower is higher)',
+                    border: OutlineInputBorder(),
+                  ),
+                ),
+              ],
+            ),
           ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Cancel'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.pop(ctx, true),
+              child: Text(isEdit ? 'Update' : 'Add'),
+            ),
+          ],
         ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
-          FilledButton(
-            onPressed: () => Navigator.pop(ctx, true),
-            child: Text(isEdit ? 'Update' : 'Add'),
-          ),
-        ],
-      ),
       ),
     );
 
@@ -117,18 +140,26 @@ class _CategoriesTabState extends ConsumerState<CategoriesTab> {
     if (name.isEmpty) return;
 
     final repo = ref.read(categoryRepositoryProvider);
+    final priority = int.tryParse(priorityCtrl.text.trim()) ?? 99;
+
     if (isEdit) {
-      await repo.updateCategory(category.copyWith(
-        categoryName: name,
-        icon: iconCtrl.text.trim(),
-        iconColor: colorCtrl.text.trim(),
-      ));
+      await repo.updateCategory(
+        category.copyWith(
+          categoryName: name,
+          icon: iconCtrl.text.trim(),
+          iconColor: colorCtrl.text.trim(),
+          priority: priority,
+        ),
+      );
     } else {
-      await repo.insertCategory(Category(
-        categoryName: name,
-        icon: iconCtrl.text.trim(),
-        iconColor: colorCtrl.text.trim(),
-      ));
+      await repo.insertCategory(
+        Category(
+          categoryName: name,
+          icon: iconCtrl.text.trim(),
+          iconColor: colorCtrl.text.trim(),
+          priority: priority,
+        ),
+      );
     }
     await _loadData();
   }
@@ -138,11 +169,18 @@ class _CategoriesTabState extends ConsumerState<CategoriesTab> {
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text('Delete Category'),
-        content: Text('Delete "${category.categoryName}" and all its subcategories?'),
+        content: Text(
+          'Delete "${category.categoryName}" and all its subcategories?',
+        ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel'),
+          ),
           FilledButton(
-            style: FilledButton.styleFrom(backgroundColor: Theme.of(ctx).colorScheme.error),
+            style: FilledButton.styleFrom(
+              backgroundColor: Theme.of(ctx).colorScheme.error,
+            ),
             onPressed: () => Navigator.pop(ctx, true),
             child: const Text('Delete'),
           ),
@@ -157,10 +195,20 @@ class _CategoriesTabState extends ConsumerState<CategoriesTab> {
 
   // ─── SubCategory CRUD dialogs ───────────────────────────
 
-  Future<void> _showSubCategoryDialog(int categoryId, {SubCategory? subCategory}) async {
-    final nameCtrl = TextEditingController(text: subCategory?.subcategoryName ?? '');
+  Future<void> _showSubCategoryDialog(
+    int categoryId, {
+    SubCategory? subCategory,
+  }) async {
+    final nameCtrl = TextEditingController(
+      text: subCategory?.subcategoryName ?? '',
+    );
     final iconCtrl = TextEditingController(text: subCategory?.icon ?? '');
-    final colorCtrl = TextEditingController(text: subCategory?.iconColor ?? '#9E9E9E');
+    final colorCtrl = TextEditingController(
+      text: subCategory?.iconColor ?? '#9E9E9E',
+    );
+    final priorityCtrl = TextEditingController(
+      text: subCategory?.priority?.toString() ?? '99',
+    );
     final isEdit = subCategory != null;
 
     final result = await showDialog<bool>(
@@ -168,54 +216,72 @@ class _CategoriesTabState extends ConsumerState<CategoriesTab> {
       builder: (ctx) => StatefulBuilder(
         builder: (ctx, setDialogState) => AlertDialog(
           title: Text(isEdit ? 'Edit SubCategory' : 'Add SubCategory'),
-        content: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              TextField(
-                controller: nameCtrl,
-                decoration: const InputDecoration(labelText: 'SubCategory Name', border: OutlineInputBorder()),
-                textCapitalization: TextCapitalization.words,
-              ),
-              const SizedBox(height: 12),
-              TextFormField(
-                controller: iconCtrl,
-                readOnly: true,
-                decoration: InputDecoration(
-                  labelText: 'Icon',
-                  border: const OutlineInputBorder(),
-                  suffixIcon: Icon(IconHelper.getIcon(iconCtrl.text)),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextField(
+                  controller: nameCtrl,
+                  decoration: const InputDecoration(
+                    labelText: 'SubCategory Name',
+                    border: OutlineInputBorder(),
+                  ),
+                  textCapitalization: TextCapitalization.words,
                 ),
-                onTap: () async {
-                  final selected = await IconPicker.show(context, initialIcon: iconCtrl.text);
-                  if (selected != null) {
-                    setDialogState(() => iconCtrl.text = selected);
-                  }
-                },
-              ),
-              const SizedBox(height: 12),
-              TextField(
-                controller: colorCtrl,
-                decoration: InputDecoration(
-                  labelText: 'Icon Color (hex)',
-                  border: const OutlineInputBorder(),
-                  suffixIcon: CircleAvatar(
-                    radius: 12,
-                    backgroundColor: ColorHelper.fromHex(colorCtrl.text),
+                const SizedBox(height: 12),
+                TextFormField(
+                  controller: iconCtrl,
+                  readOnly: true,
+                  decoration: InputDecoration(
+                    labelText: 'Icon',
+                    border: const OutlineInputBorder(),
+                    suffixIcon: Icon(IconHelper.getIcon(iconCtrl.text)),
+                  ),
+                  onTap: () async {
+                    final selected = await IconPicker.show(
+                      context,
+                      initialIcon: iconCtrl.text,
+                    );
+                    if (selected != null) {
+                      setDialogState(() => iconCtrl.text = selected);
+                    }
+                  },
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: colorCtrl,
+                  decoration: InputDecoration(
+                    labelText: 'Icon Color (hex)',
+                    border: const OutlineInputBorder(),
+                    suffixIcon: CircleAvatar(
+                      radius: 12,
+                      backgroundColor: ColorHelper.fromHex(colorCtrl.text),
+                    ),
                   ),
                 ),
-              ),
-            ],
+                const SizedBox(height: 12),
+                TextField(
+                  controller: priorityCtrl,
+                  keyboardType: TextInputType.number,
+                  decoration: const InputDecoration(
+                    labelText: 'Priority (Lower is higher)',
+                    border: OutlineInputBorder(),
+                  ),
+                ),
+              ],
+            ),
           ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Cancel'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.pop(ctx, true),
+              child: Text(isEdit ? 'Update' : 'Add'),
+            ),
+          ],
         ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
-          FilledButton(
-            onPressed: () => Navigator.pop(ctx, true),
-            child: Text(isEdit ? 'Update' : 'Add'),
-          ),
-        ],
-      ),
       ),
     );
 
@@ -224,19 +290,27 @@ class _CategoriesTabState extends ConsumerState<CategoriesTab> {
     if (name.isEmpty) return;
 
     final repo = ref.read(subCategoryRepositoryProvider);
+    final priority = int.tryParse(priorityCtrl.text.trim()) ?? 99;
+
     if (isEdit) {
-      await repo.updateSubCategory(subCategory.copyWith(
-        subcategoryName: name,
-        icon: iconCtrl.text.trim(),
-        iconColor: colorCtrl.text.trim(),
-      ));
+      await repo.updateSubCategory(
+        subCategory.copyWith(
+          subcategoryName: name,
+          icon: iconCtrl.text.trim(),
+          iconColor: colorCtrl.text.trim(),
+          priority: priority,
+        ),
+      );
     } else {
-      await repo.insertSubCategory(SubCategory(
-        subcategoryName: name,
-        categoryId: categoryId,
-        icon: iconCtrl.text.trim(),
-        iconColor: colorCtrl.text.trim(),
-      ));
+      await repo.insertSubCategory(
+        SubCategory(
+          subcategoryName: name,
+          categoryId: categoryId,
+          icon: iconCtrl.text.trim(),
+          iconColor: colorCtrl.text.trim(),
+          priority: priority,
+        ),
+      );
     }
     await _loadData();
   }
@@ -248,9 +322,14 @@ class _CategoriesTabState extends ConsumerState<CategoriesTab> {
         title: const Text('Delete SubCategory'),
         content: Text('Delete "${subCategory.subcategoryName}"?'),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel'),
+          ),
           FilledButton(
-            style: FilledButton.styleFrom(backgroundColor: Theme.of(ctx).colorScheme.error),
+            style: FilledButton.styleFrom(
+              backgroundColor: Theme.of(ctx).colorScheme.error,
+            ),
             onPressed: () => Navigator.pop(ctx, true),
             child: const Text('Delete'),
           ),
@@ -258,7 +337,9 @@ class _CategoriesTabState extends ConsumerState<CategoriesTab> {
       ),
     );
     if (confirmed == true) {
-      await ref.read(subCategoryRepositoryProvider).deleteSubCategory(subCategory.id!);
+      await ref
+          .read(subCategoryRepositoryProvider)
+          .deleteSubCategory(subCategory.id!);
       await _loadData();
     }
   }
@@ -276,7 +357,10 @@ class _CategoriesTabState extends ConsumerState<CategoriesTab> {
     return Scaffold(
       body: _categories.isEmpty
           ? Center(
-              child: Text('No categories yet.', style: TextStyle(color: colorScheme.onSurfaceVariant)),
+              child: Text(
+                'No categories yet.',
+                style: TextStyle(color: colorScheme.onSurfaceVariant),
+              ),
             )
           : ListView.builder(
               padding: const EdgeInsets.only(bottom: 80),
@@ -287,32 +371,49 @@ class _CategoriesTabState extends ConsumerState<CategoriesTab> {
                 final isExpanded = _expandedIds.contains(cat.id);
 
                 return Card(
-                  margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                  margin: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 4,
+                  ),
                   child: Column(
                     children: [
                       ListTile(
                         leading: CircleAvatar(
-                          backgroundColor: ColorHelper.fromHex(cat.iconColor).withValues(alpha: 0.15),
+                          backgroundColor: ColorHelper.fromHex(
+                            cat.iconColor,
+                          ).withValues(alpha: 0.15),
                           child: Icon(
                             IconHelper.getIcon(cat.icon),
                             color: ColorHelper.fromHex(cat.iconColor),
                           ),
                         ),
-                        title: Text(cat.categoryName, style: const TextStyle(fontWeight: FontWeight.w600)),
-                        subtitle: Text('${subs.length} subcategories'),
+                        title: Text(
+                          cat.categoryName,
+                          style: const TextStyle(fontWeight: FontWeight.w600),
+                        ),
+                        subtitle: Text('subcategories: ${subs.length}'),
                         trailing: Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [
                             IconButton(
                               icon: const Icon(Icons.edit_outlined, size: 20),
-                              onPressed: () => _showCategoryDialog(category: cat),
+                              onPressed: () =>
+                                  _showCategoryDialog(category: cat),
                             ),
                             IconButton(
-                              icon: Icon(Icons.delete_outline, size: 20, color: colorScheme.error),
+                              icon: Icon(
+                                Icons.delete_outline,
+                                size: 20,
+                                color: colorScheme.error,
+                              ),
                               onPressed: () => _confirmDeleteCategory(cat),
                             ),
                             IconButton(
-                              icon: Icon(isExpanded ? Icons.expand_less : Icons.expand_more),
+                              icon: Icon(
+                                isExpanded
+                                    ? Icons.expand_less
+                                    : Icons.expand_more,
+                              ),
                               onPressed: () {
                                 setState(() {
                                   if (isExpanded) {
@@ -328,32 +429,59 @@ class _CategoriesTabState extends ConsumerState<CategoriesTab> {
                       ),
                       if (isExpanded) ...[
                         const Divider(height: 1),
-                        ...subs.map((sub) => ListTile(
-                              contentPadding: const EdgeInsets.only(left: 32, right: 16),
-                              leading: CircleAvatar(
-                                radius: 16,
-                                backgroundColor: ColorHelper.fromHex(sub.iconColor).withValues(alpha: 0.15),
-                                child: Icon(
-                                  IconHelper.getIcon(sub.icon),
-                                  size: 18,
-                                  color: ColorHelper.fromHex(sub.iconColor),
+                        ...subs.map(
+                          (sub) => ListTile(
+                            contentPadding: const EdgeInsets.only(
+                              left: 32,
+                              right: 16,
+                            ),
+                            leading: CircleAvatar(
+                              radius: 16,
+                              backgroundColor: ColorHelper.fromHex(
+                                sub.iconColor,
+                              ).withValues(alpha: 0.15),
+                              child: Icon(
+                                IconHelper.getIcon(sub.icon),
+                                size: 18,
+                                color: ColorHelper.fromHex(sub.iconColor),
+                              ),
+                            ),
+                            title: Text(sub.subcategoryName),
+                            subtitle: Text(
+                              'Priority: ${sub.priority ?? 99}',
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: colorScheme.onSurfaceVariant.withValues(
+                                  alpha: 0.7,
                                 ),
                               ),
-                              title: Text(sub.subcategoryName),
-                              trailing: Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  IconButton(
-                                    icon: const Icon(Icons.edit_outlined, size: 18),
-                                    onPressed: () => _showSubCategoryDialog(cat.id!, subCategory: sub),
+                            ),
+                            trailing: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                IconButton(
+                                  icon: const Icon(
+                                    Icons.edit_outlined,
+                                    size: 18,
                                   ),
-                                  IconButton(
-                                    icon: Icon(Icons.delete_outline, size: 18, color: colorScheme.error),
-                                    onPressed: () => _confirmDeleteSubCategory(sub),
+                                  onPressed: () => _showSubCategoryDialog(
+                                    cat.id!,
+                                    subCategory: sub,
                                   ),
-                                ],
-                              ),
-                            )),
+                                ),
+                                IconButton(
+                                  icon: Icon(
+                                    Icons.delete_outline,
+                                    size: 18,
+                                    color: colorScheme.error,
+                                  ),
+                                  onPressed: () =>
+                                      _confirmDeleteSubCategory(sub),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
                         Padding(
                           padding: const EdgeInsets.only(left: 32, bottom: 8),
                           child: Align(

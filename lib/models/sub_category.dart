@@ -30,10 +30,10 @@ class SubCategory {
     return {
       if (id != null) 'subcategory_id': id,
       'subcategory_name': subcategoryName,
-      'icon': icon,
+      if (icon != null) 'icon': icon,
       'category_id': categoryId,
-      'icon_color': iconColor,
-      'priority': priority,
+      if (iconColor != null) 'icon_color': iconColor,
+      if (priority != null) 'priority': priority,
     };
   }
 

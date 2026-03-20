@@ -27,9 +27,9 @@ class Category {
     return {
       if (id != null) 'category_id': id,
       'category_name': categoryName,
-      'icon': icon,
-      'icon_color': iconColor,
-      'priority': priority,
+      if (icon != null) 'icon': icon,
+      if (iconColor != null) 'icon_color': iconColor,
+      if (priority != null) 'priority': priority,
     };
   }
 

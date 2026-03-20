@@ -191,11 +191,15 @@ INSERT INTO category (category_name, icon, icon_color, priority) VALUES ('Educat
 INSERT INTO category (category_name, icon, icon_color, priority) VALUES ('Healthcare', 'favorite', '#DC143C', 11);
 INSERT INTO category (category_name, icon, icon_color, priority) VALUES ('Entertainment', 'movie', '#FF69B4', 12);
 INSERT INTO category (category_name, icon, icon_color, priority) VALUES ('Insurance', 'shield', '#808080', 13);
+INSERT INTO category (category_name, icon, icon_color, priority) VALUES ('Income', 'currency_rupee', '#0FF2E7D32', 14);
 INSERT INTO category (category_name, icon, icon_color, priority) VALUES ('Travel', 'flight', '#4682B4', 98);
 INSERT INTO category (category_name, icon, icon_color, priority) VALUES ('Other', 'more_horiz', '#A9A9A9', 99);
 
 -- 2. sub_category
 INSERT INTO sub_category (subcategory_name, icon, icon_color, priority, category_id) VALUES ('Fruits', 'nutrition', '#FF4C4C', 99, (SELECT category_id FROM category WHERE category_name = 'Groceries'));
+INSERT INTO sub_category (subcategory_name, icon, icon_color, priority, category_id) VALUES ('Salary', 'payments', '#FF43A047', 99, (SELECT category_id FROM category WHERE category_name = 'Income'));
+INSERT INTO sub_category (subcategory_name, icon, icon_color, priority, category_id) VALUES ('Investment', 'show_chart', '#FF00C853', 99, (SELECT category_id FROM category WHERE category_name = 'Income'));
+INSERT INTO sub_category (subcategory_name, icon, icon_color, priority, category_id) VALUES ('Other', 'attach_money', '#FF66BB6A', 99, (SELECT category_id FROM category WHERE category_name = 'Income'));
 INSERT INTO sub_category (subcategory_name, icon, icon_color, priority, category_id) VALUES ('Vegetables', 'eco', '#4CAF50', 99, (SELECT category_id FROM category WHERE category_name = 'Groceries'));
 INSERT INTO sub_category (subcategory_name, icon, icon_color, priority, category_id) VALUES ('Dairy', 'breakfast_dining', '#2196F3', 99, (SELECT category_id FROM category WHERE category_name = 'Groceries'));
 INSERT INTO sub_category (subcategory_name, icon, icon_color, priority, category_id) VALUES ('Meat', 'set_meal', '#795548', 99, (SELECT category_id FROM category WHERE category_name = 'Groceries'));
@@ -273,9 +277,6 @@ INSERT INTO expense_purpose (expense_for, icon, icon_color, priority) VALUES ('H
 INSERT INTO expense_purpose (expense_for, icon, icon_color, priority) VALUES ('Future Investment', 'schedule', '#2980B9', 5);
 INSERT INTO expense_purpose (expense_for, icon, icon_color, priority) VALUES ('Charity', 'handshake', '#16A085', 6);
 INSERT INTO expense_purpose (expense_for, icon, icon_color, priority) VALUES ('Self Transfer', 'account_circle', '#9E9E9E', 7);
-INSERT INTO expense_purpose (expense_for, icon, icon_color, priority) VALUES ('Kid', 'child_care', '#32CD32', 99);
-INSERT INTO expense_purpose (expense_for, icon, icon_color, priority) VALUES ('Girl', 'woman', '#FF1493', 99);
-INSERT INTO expense_purpose (expense_for, icon, icon_color, priority) VALUES ('Boy', 'person', '#4682B4', 99);
 INSERT INTO expense_purpose (expense_for, icon, icon_color, priority) VALUES ('OTHERS', 'more_horiz', '#808080', 99);
 
 -- 7. payment_method
@@ -303,13 +304,5 @@ INSERT INTO budget (budget_amount, budget_frequency, month, year, created_time, 
 INSERT INTO merchant (merchant_name, icon, icon_color, priority, created_time, updated_time) VALUES ('Amazon', 'store', '#FF9800', 0, '2025-09-18 03:42:09', '2025-09-18 03:42:09');
 INSERT INTO merchant (merchant_name, icon, icon_color, priority, created_time, updated_time) VALUES ('Uber', 'store', '#FF9800', 0, '2025-09-18 03:42:09', '2025-09-18 03:42:09');
 INSERT INTO merchant (merchant_name, icon, icon_color, priority, created_time, updated_time) VALUES ('Reliance Fresh', 'store', '#FF9800', 0, '2025-09-18 03:42:09', '2025-09-18 03:42:09');
-INSERT INTO merchant (merchant_name, icon, icon_color, priority, created_time, updated_time) VALUES ('ABC', 'store', '#FF9800', 0, '2025-09-20 15:15:14', '2025-09-20 15:15:14');
 INSERT INTO merchant (merchant_name, icon, icon_color, priority, created_time, updated_time) VALUES ('TCS', 'store', '#6B7280', 0, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);
 INSERT INTO merchant (merchant_name, icon, icon_color, priority, created_time, updated_time) VALUES ('Maryada Ramanna', 'store', '#6B7280', 0, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);
-
--- 11. transaction
-INSERT INTO "transaction" (transaction_type, amount, transaction_date, description, labeled, created_time, updated_time, category_id, subcategory_id, purpose_id, account_id, card_id, merchant_id, payment_method_id, expense_source_id, related_transaction_id) VALUES ('DEBIT', 20.00, '2025-11-13', 'UPI-MOHD SAIFUL', 0, '2025-12-08 17:15:23', '2025-12-08 17:15:23', NULL, NULL, NULL, (SELECT account_id FROM account WHERE account_name = 'HDFC Bank'), (SELECT card_id FROM cards WHERE card_name = 'Tata Neu'), NULL, NULL, (SELECT expense_source_id FROM expense_source WHERE expense_source_name = 'BANK_STATEMENT'), NULL);
-INSERT INTO "transaction" (transaction_type, amount, transaction_date, description, labeled, created_time, updated_time, category_id, subcategory_id, purpose_id, account_id, card_id, merchant_id, payment_method_id, expense_source_id, related_transaction_id) VALUES ('DEBIT', 50.00, '2025-11-13', 'UPI-BHAIJAN', 0, '2025-12-08 17:15:23', '2025-12-08 17:15:23', NULL, NULL, NULL, (SELECT account_id FROM account WHERE account_name = 'HDFC Bank'), (SELECT card_id FROM cards WHERE card_name = 'Tata Neu'), NULL, NULL, (SELECT expense_source_id FROM expense_source WHERE expense_source_name = 'BANK_STATEMENT'), NULL);
-INSERT INTO "transaction" (transaction_type, amount, transaction_date, description, labeled, created_time, updated_time, category_id, subcategory_id, purpose_id, account_id, card_id, merchant_id, payment_method_id, expense_source_id, related_transaction_id) VALUES ('DEBIT', 20.00, '2025-11-13', 'UPI-Devsath Aruna bai', 0, '2025-12-08 17:15:23', '2025-12-08 17:15:23', NULL, NULL, NULL, (SELECT account_id FROM account WHERE account_name = 'HDFC Bank'), (SELECT card_id FROM cards WHERE card_name = 'Tata Neu'), NULL, NULL, (SELECT expense_source_id FROM expense_source WHERE expense_source_name = 'BANK_STATEMENT'), NULL);
-INSERT INTO "transaction" (transaction_type, amount, transaction_date, description, labeled, created_time, updated_time, category_id, subcategory_id, purpose_id, account_id, card_id, merchant_id, payment_method_id, expense_source_id, related_transaction_id) VALUES ('DEBIT', 30.00, '2025-11-13', 'UPI-Kadadhanar Santhosh', 0, '2025-12-08 17:15:23', '2025-12-08 17:15:23', NULL, NULL, NULL, (SELECT account_id FROM account WHERE account_name = 'HDFC Bank'), (SELECT card_id FROM cards WHERE card_name = 'Tata Neu'), NULL, NULL, (SELECT expense_source_id FROM expense_source WHERE expense_source_name = 'BANK_STATEMENT'), NULL);
-INSERT INTO "transaction" (transaction_type, amount, transaction_date, description, labeled, created_time, updated_time, category_id, subcategory_id, purpose_id, account_id, card_id, merchant_id, payment_method_id, expense_source_id, related_transaction_id) VALUES ('DEBIT', 50.00, '2025-11-13', 'UPI-SINGAPANGA YADAIAH', 0, '2025-12-08 17:15:23', '2025-12-08 17:15:23', NULL, NULL, NULL, (SELECT account_id FROM account WHERE account_name = 'HDFC Bank'), (SELECT card_id FROM cards WHERE card_name = 'Tata Neu'), NULL, NULL, (SELECT expense_source_id FROM expense_source WHERE expense_source_name = 'BANK_STATEMENT'), NULL);
