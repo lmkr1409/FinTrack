@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -142,18 +144,18 @@ class _BudgetsTabState extends State<BudgetsTab> {
                 
                 final progressM = budgetM > 0 ? actual / budgetM : 0.0;
                 final isOverM = actual > budgetM;
-                
-                // Rollover logic: if over monthly, how much is left in yearly?
-                // This is a simplified "Yearly available pool" view.
-                final excess = isOverM ? actual - budgetM : 0.0;
+                final yearlyActual = (b['actual_annual'] as num?)?.toDouble() ?? actual;
                 final hasAnnual = budgetA > 0;
-                
+
                 Color circleColor;
-                if (progressM < 0.6) circleColor = Colors.greenAccent;
+                if (progressM < 0.6) circleColor = Colors.greenAccent.shade700;
                 else if (progressM < 0.85) circleColor = Colors.amber;
                 else if (progressM <= 1.0) circleColor = Colors.orangeAccent;
-                else if (hasAnnual && excess <= budgetA) circleColor = Colors.blueAccent; // Utilizing Yearly
-                else circleColor = AppColors.expense; // Truly Over
+                else circleColor = AppColors.expense;
+
+                final yearlyProgress = budgetA > 0
+                    ? (yearlyActual / budgetA).clamp(0.0, 1.5)
+                    : 0.0;
 
                 return GlassCard(
                   margin: EdgeInsets.zero,
@@ -168,32 +170,22 @@ class _BudgetsTabState extends State<BudgetsTab> {
                         overflow: TextOverflow.ellipsis,
                       ),
                       const SizedBox(height: 12),
-                      SizedBox(
-                        width: 64,
-                        height: 64,
-                        child: Stack(
-                          fit: StackFit.expand,
+                      _DoubleRingProgress(
+                        size: 80,
+                        outerProgress: yearlyProgress.clamp(0.0, 1.0),
+                        innerProgress: progressM.clamp(0.0, 1.5),
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
                           children: [
-                            CircularProgressIndicator(
-                              value: (hasAnnual && isOverM) 
-                                ? (excess / budgetA).clamp(0, 1).toDouble() // Show yearly utilization if over monthly
-                                : progressM.clamp(0, 1).toDouble(),
-                              backgroundColor: AppColors.surfaceContainer,
-                              color: circleColor,
-                              strokeWidth: 6,
+                            Text(
+                              isOverM ? 'OVER' : '${(progressM * 100).toStringAsFixed(0)}%',
+                              style: TextStyle(fontWeight: FontWeight.bold, color: circleColor, fontSize: 12),
                             ),
-                            if (hasAnnual && isOverM) 
-                               CircularProgressIndicator(
-                                value: 1.0,
-                                color: Colors.greenAccent.withOpacity(0.2),
-                                strokeWidth: 2,
+                            if (hasAnnual)
+                              Text(
+                                '${(yearlyProgress * 100).toStringAsFixed(0)}%Y',
+                                style: const TextStyle(fontSize: 9, color: Colors.white54),
                               ),
-                            Center(
-                              child: Text(
-                                isOverM ? 'OVER' : '${(progressM * 100).toStringAsFixed(0)}%',
-                                style: TextStyle(fontWeight: FontWeight.bold, color: circleColor, fontSize: 13),
-                              ),
-                            ),
                           ],
                         ),
                       ),
@@ -202,25 +194,21 @@ class _BudgetsTabState extends State<BudgetsTab> {
                         '₹${actual.toStringAsFixed(0)} / ₹${budgetM.toStringAsFixed(0)}',
                         style: const TextStyle(color: AppColors.textMuted, fontSize: 11),
                       ),
-                      if (hasAnnual && isOverM) ...[
-                        const SizedBox(height: 4),
+                      if (hasAnnual) ...[
+                        const SizedBox(height: 2),
                         Text(
-                          'Yearly pool: ₹${budgetA.toStringAsFixed(0)}',
-                          style: const TextStyle(color: Colors.blueAccent, fontSize: 10, fontWeight: FontWeight.bold),
+                          'Yearly: ₹${yearlyActual.toStringAsFixed(0)} / ₹${budgetA.toStringAsFixed(0)}',
+                          style: const TextStyle(color: Colors.white38, fontSize: 10),
                         ),
                       ],
                       const SizedBox(height: 4),
                       Text(
-                        isOverM 
-                          ? (hasAnnual && excess <= budgetA 
-                              ? 'Using Yearly Budget' 
-                              : 'Over by ₹${excess.toStringAsFixed(0)}')
+                        isOverM
+                          ? 'Over by ₹${(actual - budgetM).toStringAsFixed(0)}'
                           : '₹${(budgetM - actual).toStringAsFixed(0)} left',
                         style: TextStyle(
-                          color: isOverM 
-                            ? (hasAnnual && excess <= budgetA ? Colors.blueAccent : AppColors.expense) 
-                            : AppColors.income, 
-                          fontWeight: FontWeight.w600, 
+                          color: isOverM ? AppColors.expense : AppColors.income,
+                          fontWeight: FontWeight.w600,
                           fontSize: 11
                         ),
                         maxLines: 1,
@@ -330,4 +318,91 @@ class _BudgetsTabState extends State<BudgetsTab> {
       },
     );
   }
+}
+
+// ─── Double-Ring Progress Widget ─────────────────────────────────────────
+// Outer ring = Yearly budget progress  |  Inner ring = Monthly budget progress
+
+class _DoubleRingProgress extends StatelessWidget {
+  final double size;
+  final double outerProgress; // yearly: [0..1]
+  final double innerProgress; // monthly: [0..1.5 clamped]
+  final Widget? child;
+
+  const _DoubleRingProgress({
+    required this.size,
+    required this.outerProgress,
+    required this.innerProgress,
+    this.child,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: size,
+      height: size,
+      child: CustomPaint(
+        painter: _DoubleRingPainter(
+          outerProgress: outerProgress,
+          innerProgress: innerProgress,
+        ),
+        child: Center(child: child),
+      ),
+    );
+  }
+}
+
+class _DoubleRingPainter extends CustomPainter {
+  final double outerProgress;
+  final double innerProgress;
+
+  _DoubleRingPainter({required this.outerProgress, required this.innerProgress});
+
+  static Color _progressColor(double p) {
+    if (p > 1.0) return Colors.redAccent;
+    if (p > 0.85) return Colors.orangeAccent;
+    if (p > 0.6) return Colors.amber;
+    return Colors.greenAccent.shade700;
+  }
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final center = Offset(size.width / 2, size.height / 2);
+    const startAngle = -math.pi / 2;
+
+    // ── Outer ring: Yearly budget ──
+    const outerStroke = 5.0;
+    final outerR = (size.width / 2) - outerStroke / 2;
+    final outerTrack = Rect.fromCircle(center: center, radius: outerR);
+    final outerColor = _progressColor(outerProgress);
+
+    canvas.drawArc(outerTrack, 0, 2 * math.pi, false,
+      Paint()..color = outerColor.withValues(alpha: 0.15)
+              ..strokeWidth = outerStroke..style = PaintingStyle.stroke..strokeCap = StrokeCap.round);
+    if (outerProgress > 0) {
+      canvas.drawArc(outerTrack, startAngle, 2 * math.pi * outerProgress.clamp(0.0, 1.0), false,
+        Paint()..color = outerColor
+                ..strokeWidth = outerStroke..style = PaintingStyle.stroke..strokeCap = StrokeCap.round);
+    }
+
+    // ── Inner ring: Monthly budget ──
+    const innerStroke = 4.0;
+    const gap = 4.5;
+    final innerR = outerR - outerStroke - gap;
+    final innerTrack = Rect.fromCircle(center: center, radius: innerR);
+    final innerColor = _progressColor(innerProgress);
+
+    canvas.drawArc(innerTrack, 0, 2 * math.pi, false,
+      Paint()..color = Colors.white.withValues(alpha: 0.08)
+              ..strokeWidth = innerStroke..style = PaintingStyle.stroke..strokeCap = StrokeCap.round);
+    if (innerProgress > 0) {
+      canvas.drawArc(innerTrack, startAngle, 2 * math.pi * innerProgress.clamp(0.0, 1.0), false,
+        Paint()..color = innerColor
+                ..strokeWidth = innerStroke..style = PaintingStyle.stroke..strokeCap = StrokeCap.round);
+    }
+  }
+
+  @override
+  bool shouldRepaint(_DoubleRingPainter old) =>
+      old.outerProgress != outerProgress || old.innerProgress != innerProgress;
 }

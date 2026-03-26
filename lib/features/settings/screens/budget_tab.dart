@@ -33,7 +33,7 @@ class _BudgetTabState extends ConsumerState<BudgetTab> {
 
   double _totalBudgetAmount = 0;
   int? _totalBudgetId;
-  
+
   // Local state for the text fields. Key: Category ID, Value: Input string
   final Map<int, String> _budgetInputs = {};
   final Map<int, String> _annualBudgetInputs = {};
@@ -53,21 +53,21 @@ class _BudgetTabState extends ConsumerState<BudgetTab> {
 
     final budgets = await budgetRepo.getAllSorted();
     final categories = await categoryRepo.getAllSorted();
-    
-    BudgetTotal? total;
+
+    final BudgetTotal? activePeriodTotal;
     if (_period == _BudgetPeriod.monthly) {
-      total = await totalRepo.getMonthlyTotal(_selectedMonth.month, _selectedMonth.year);
+      activePeriodTotal = await totalRepo.getMonthlyTotal(_selectedMonth.month, _selectedMonth.year);
     } else {
-      total = await totalRepo.getAnnualTotal(_selectedYear);
+      activePeriodTotal = await totalRepo.getAnnualTotal(_selectedYear);
     }
 
     _populateLocalInputs(budgets);
-    
+
     setState(() {
       _budgets = budgets;
       _categories = categories;
-      _totalBudgetAmount = total?.budgetAmount ?? 0;
-      _totalBudgetId = total?.id;
+      _totalBudgetAmount = activePeriodTotal?.budgetAmount ?? 0;
+      _totalBudgetId = activePeriodTotal?.id;
       _globalBudgetInput = _totalBudgetAmount > 0 ? _totalBudgetAmount.toStringAsFixed(0) : '';
       _loading = false;
     });
@@ -359,7 +359,7 @@ class _BudgetTabState extends ConsumerState<BudgetTab> {
       itemBuilder: (context, i) {
         final cat = filteredCategories[i];
         if (cat.id == null) return const SizedBox.shrink();
-        
+
         return GlassCard(
           margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
           child: Padding(
@@ -373,26 +373,27 @@ class _BudgetTabState extends ConsumerState<BudgetTab> {
                 ),
                 const SizedBox(width: 12),
                 Expanded(
-                  child: Text(cat.categoryName, style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14, color: Colors.white)),
+                  child: Text(cat.categoryName,
+                      style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14, color: Colors.white)),
                 ),
                 const SizedBox(width: 16),
                 SizedBox(
                   width: 100,
-                    child: _buildCompactBudgetInput(
-                      initialValue: isMonthly 
-                        ? (_budgetInputs[cat.id!] ?? '') 
-                        : (_annualBudgetInputs[cat.id!] ?? ''),
-                      isExceeded: isExceeded,
-                      onChanged: (val) {
-                        if (isMonthly) {
-                          _budgetInputs[cat.id!] = val;
-                        } else {
-                          _annualBudgetInputs[cat.id!] = val;
-                        }
-                        setState(() {}); // Refresh planned sum
-                      },
-                      cs: cs,
-                    ),
+                  child: _buildCompactBudgetInput(
+                    initialValue: isMonthly
+                      ? (_budgetInputs[cat.id!] ?? '')
+                      : (_annualBudgetInputs[cat.id!] ?? ''),
+                    isExceeded: isExceeded,
+                    onChanged: (val) {
+                      if (isMonthly) {
+                        _budgetInputs[cat.id!] = val;
+                      } else {
+                        _annualBudgetInputs[cat.id!] = val;
+                      }
+                      setState(() {});
+                    },
+                    cs: cs,
+                  ),
                 ),
               ],
             ),

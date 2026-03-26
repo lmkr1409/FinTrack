@@ -26,6 +26,7 @@ class AutocompleteField<T extends Object> extends StatefulWidget {
 class _AutocompleteFieldState<T extends Object> extends State<AutocompleteField<T>> {
   late TextEditingController _controller;
   late FocusNode _focusNode;
+  String? _lastSelectedText;
 
   @override
   void initState() {
@@ -42,9 +43,14 @@ class _AutocompleteFieldState<T extends Object> extends State<AutocompleteField<
     // If the external item changes (e.g., from creating a new one), update the text.
     if (widget.initialItem != oldWidget.initialItem) {
       if (widget.initialItem != null) {
-        _controller.text = widget.displayStringForOption(widget.initialItem as T);
+        final newText = widget.displayStringForOption(widget.initialItem as T);
+        if (_controller.text != newText) {
+          _controller.text = newText;
+        }
       } else {
-        _controller.clear();
+        if (_controller.text.isNotEmpty) {
+          _controller.clear();
+        }
       }
     }
   }
@@ -67,18 +73,22 @@ class _AutocompleteFieldState<T extends Object> extends State<AutocompleteField<
             displayStringForOption: widget.displayStringForOption,
             optionsBuilder: (TextEditingValue textEditingValue) {
               final query = textEditingValue.text.toLowerCase();
+              if (_lastSelectedText != null && textEditingValue.text == _lastSelectedText) {
+                return Iterable<T>.empty();
+              }
               return widget.items.where((T item) {
                 return widget.displayStringForOption(item).toLowerCase().contains(query);
               });
             },
             onSelected: (T selection) {
-              widget.onChanged(selection);
-              _focusNode.unfocus();
+              // Use microtask to avoid disrupting RawAutocomplete's internal logic with a rebuild
+              Future.microtask(() => widget.onChanged(selection));
             },
             fieldViewBuilder: (context, controller, focusNode, onFieldSubmitted) {
               return TextFormField(
                 controller: controller,
                 focusNode: focusNode,
+                scrollPadding: const EdgeInsets.only(bottom: 250),
                 decoration: InputDecoration(
                   labelText: widget.label,
                   border: const OutlineInputBorder(),
@@ -91,6 +101,7 @@ class _AutocompleteFieldState<T extends Object> extends State<AutocompleteField<
                   ) : null,
                 ),
                 onChanged: (val) {
+                  _lastSelectedText = null;
                   // If they alter the text, we deselect the current item.
                   // Only if we already had a selection do we clear it in parent.
                   if (widget.initialItem != null && val != widget.displayStringForOption(widget.initialItem as T)) {
@@ -122,6 +133,7 @@ class _AutocompleteFieldState<T extends Object> extends State<AutocompleteField<
                         return ListTile(
                           title: Text(widget.displayStringForOption(option)),
                           onTap: () {
+                            _lastSelectedText = widget.displayStringForOption(option);
                             onSelected(option);
                           },
                         );

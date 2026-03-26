@@ -235,4 +235,35 @@ class TransactionRepository extends BaseRepository<Transaction> {
       whereArgs: [startDate, endDate],
     );
   }
+
+  /// Returns a map of category_id → total spent amount (DEBIT transactions).
+  /// For monthly period, filters by month + year. For annual, filters by year only.
+  Future<Map<int, double>> spentByCategoryForPeriod({
+    int? month,
+    required int year,
+  }) async {
+    final conditions = <String>[
+      "transaction_type = 'DEBIT'",
+      "CAST(substr(transaction_date, 1, 4) AS INTEGER) = ?",
+    ];
+    final args = <Object>[year];
+
+    if (month != null) {
+      conditions.add("CAST(substr(transaction_date, 6, 2) AS INTEGER) = ?");
+      args.add(month);
+    }
+
+    final rows = await rawQuery(
+      'SELECT category_id, COALESCE(SUM(amount), 0) as total '
+      'FROM "transaction" '
+      'WHERE ${conditions.join(' AND ')} AND category_id IS NOT NULL '
+      'GROUP BY category_id',
+      args,
+    );
+
+    return {
+      for (final r in rows)
+        (r['category_id'] as int): (r['total'] as num).toDouble(),
+    };
+  }
 }

@@ -56,9 +56,9 @@ class _LabelDialogState extends ConsumerState<LabelDialog> {
   String _accountKeyword = '';
   String _cardKeyword = '';
 
-  // Autocomplete controller for merchant keyword
   final _merchantKeywordCtrl = TextEditingController();
   final _merchantKeywordFocus = FocusNode();
+  String? _merchantKeywordLastSelectedText;
 
   // Lookup lists
   List<Category> _categories = [];
@@ -673,7 +673,9 @@ class _LabelDialogState extends ConsumerState<LabelDialog> {
                                   textEditingController: _merchantKeywordCtrl,
                                   focusNode: _merchantKeywordFocus,
                                   optionsBuilder: (TextEditingValue textEditingValue) {
-                                    if (textEditingValue.text.isEmpty) {
+                                    if (textEditingValue.text.isEmpty ||
+                                        (_merchantKeywordLastSelectedText != null &&
+                                            textEditingValue.text == _merchantKeywordLastSelectedText)) {
                                       return const Iterable<String>.empty();
                                     }
                                     return textTokens.where((String option) {
@@ -684,6 +686,10 @@ class _LabelDialogState extends ConsumerState<LabelDialog> {
                                     return TextFormField(
                                       controller: textEditingController,
                                       focusNode: focusNode,
+                                      scrollPadding: const EdgeInsets.only(bottom: 250),
+                                      onChanged: (_) {
+                                        _merchantKeywordLastSelectedText = null;
+                                      },
                                       decoration: const InputDecoration(
                                         labelText: 'Merchant Keyword (Auto-suggests)',
                                         hintText: 'e.g. q321SDf54sf64sdv6@ybl',
@@ -705,7 +711,11 @@ class _LabelDialogState extends ConsumerState<LabelDialog> {
                                             itemBuilder: (context, index) {
                                               final option = options.elementAt(index);
                                               return InkWell(
-                                                onTap: () => onSelected(option),
+                                                onTap: () {
+                                                  _merchantKeywordLastSelectedText = option;
+                                                  onSelected(option);
+                                                  // Do not unfocus keyword field after selection
+                                                },
                                                 child: Padding(
                                                   padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                                                   child: Text(option),
@@ -724,7 +734,24 @@ class _LabelDialogState extends ConsumerState<LabelDialog> {
                                   initialItem: _merchantId == null ? null : _merchants.where((m) => m.id == _merchantId).firstOrNull,
                                   items: _merchants,
                                   displayStringForOption: (m) => m.merchantName,
-                                  onChanged: (m) => setState(() => _merchantId = m?.id),
+                                  onChanged: (m) {
+                                    setState(() => _merchantId = m?.id);
+                                    if (m != null) {
+                                      // Auto-populate Category, SubCategory, and Purpose from existing rules
+                                      ref.read(merchantRuleRepositoryProvider).getByMerchantId(m.id!).then((rule) {
+                                        if (rule != null && mounted) {
+                                          setState(() {
+                                            if (rule.categoryId != null) _categoryId = rule.categoryId;
+                                            if (rule.subcategoryId != null) _subcategoryId = rule.subcategoryId;
+                                            if (rule.purposeId != null) _purposeId = rule.purposeId;
+                                          });
+                                          if (rule.categoryId != null) {
+                                            _loadSubs(rule.categoryId!);
+                                          }
+                                        }
+                                      });
+                                    }
+                                  },
                                   onAddNew: (text) {
                                     final existingColors = _merchants.map((m) => m.iconColor).whereType<String>().toList();
                                     final newColor = ColorHelper.generateUniqueColor(existingColors);

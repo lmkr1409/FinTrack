@@ -33,6 +33,17 @@ class MerchantRuleRepository {
     return null;
   }
 
+  Future<MerchantRule?> getByMerchantId(int merchantId) async {
+    final db = await _databaseService.database;
+    final List<Map<String, dynamic>> maps = await db.query(
+      'merchant_rule',
+      where: 'merchant_id = ?',
+      whereArgs: [merchantId],
+    );
+    if (maps.isNotEmpty) return MerchantRule.fromMap(maps.first);
+    return null;
+  }
+
   Future<int> update(int id, Map<String, dynamic> row) async {
     final db = await _databaseService.database;
     return await db.update(

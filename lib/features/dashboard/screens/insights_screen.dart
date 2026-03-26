@@ -49,7 +49,7 @@ class _InsightsScreenState extends State<InsightsScreen> {
           NavigationDestination(
             icon: Icon(Icons.analytics_outlined),
             selectedIcon: Icon(Icons.analytics_rounded),
-            label: 'Analytics',
+            label: 'Breakdowns',
           ),
           NavigationDestination(
             icon: Icon(Icons.trending_up_outlined),
