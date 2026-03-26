@@ -35,10 +35,16 @@ class _MerchantsTabState extends ConsumerState<MerchantsTab> {
   }
 
   Future<void> _showMerchantDialog({Merchant? merchant}) async {
+    final isEdit = merchant != null;
     final nameCtrl = TextEditingController(text: merchant?.merchantName ?? '');
     final iconCtrl = TextEditingController(text: merchant?.icon ?? 'store');
-    final colorCtrl = TextEditingController(text: merchant?.iconColor ?? '#FF9800');
-    final isEdit = merchant != null;
+    
+    String defaultColor = merchant?.iconColor ?? '#FF9800';
+    if (!isEdit) {
+      final existingColors = _merchants.map((m) => m.iconColor).whereType<String>().toList();
+      defaultColor = ColorHelper.generateUniqueColor(existingColors);
+    }
+    final colorCtrl = TextEditingController(text: defaultColor);
 
     final result = await showDialog<bool>(
       context: context,

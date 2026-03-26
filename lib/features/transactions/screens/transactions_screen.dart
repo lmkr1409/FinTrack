@@ -11,6 +11,7 @@ import '../../../widgets/glass_card.dart';
 import 'add_transaction_screen.dart';
 import 'delete_transactions_sheet.dart';
 import 'upload_statement_screen.dart';
+import '../../../services/sms_listener_service.dart';
 
 import '../../../core/utils/color_helper.dart';
 import '../../../core/utils/icon_helper.dart';
@@ -48,8 +49,14 @@ class _TransactionsScreenState extends ConsumerState<TransactionsScreen> {
     _loadData();
   }
 
-  Future<void> _loadData() async {
-    setState(() => _loading = true);
+  Future<void> _handleRefresh() async {
+    final container = ProviderScope.containerOf(context);
+    await SmsListenerService.syncInboxMessages(container);
+    await _loadData();
+  }
+
+  Future<void> _loadData({bool showLoading = false}) async {
+    if (showLoading) setState(() => _loading = true);
     final categories = await ref.read(categoryRepositoryProvider).getAllSorted();
     final accounts = await ref.read(accountRepositoryProvider).getAllSorted();
     final merchants = await ref.read(merchantRepositoryProvider).getAllSorted();
@@ -185,17 +192,23 @@ class _TransactionsScreenState extends ConsumerState<TransactionsScreen> {
 
     if (saved == true) {
       final newAmount = double.parse(amountController.text);
-      if (newAmount != txn.amount || type != txn.transactionType) {
+      if (newAmount != txn.amount || type != txn.transactionType || (!txn.labeled && txn.isAutoLabeled)) {
         final updatedTxn = txn.copyWith(
           amount: newAmount,
           transactionType: type,
+          labeled: true,
+          isAutoLabeled: false,
           updatedTime: DateFormat('yyyy-MM-dd HH:mm:ss').format(DateTime.now()),
         );
         await ref.read(transactionRepositoryProvider).updateTransaction(updatedTxn);
         await _loadData();
       }
     }
-    amountController.dispose();
+    
+    // Dispose after dialog animation completes to prevent 'used after disposed' exceptions
+    Future.delayed(const Duration(milliseconds: 300), () {
+      amountController.dispose();
+    });
   }
 
 
@@ -217,13 +230,25 @@ class _TransactionsScreenState extends ConsumerState<TransactionsScreen> {
           Expanded(
             child: _loading
                 ? const Center(child: CircularProgressIndicator())
-                : _transactions.isEmpty
-                    ? Center(child: Text('No transactions found.', style: TextStyle(color: AppColors.textMuted)))
-                    : ListView.builder(
-                        padding: const EdgeInsets.only(bottom: 80, top: 4),
-                        itemCount: _transactions.length,
-                        itemBuilder: (context, i) => _buildTxnTile(_transactions[i]),
-                      ),
+                : RefreshIndicator(
+                    onRefresh: _handleRefresh,
+                    child: _transactions.isEmpty
+                        ? ListView(
+                            physics: const AlwaysScrollableScrollPhysics(),
+                            children: [
+                              SizedBox(
+                                height: MediaQuery.of(context).size.height * 0.6,
+                                child: const Center(child: Text('No transactions found.', style: TextStyle(color: AppColors.textMuted))),
+                              ),
+                            ],
+                          )
+                        : ListView.builder(
+                            physics: const AlwaysScrollableScrollPhysics(),
+                            padding: const EdgeInsets.only(bottom: 80, top: 4),
+                            itemCount: _transactions.length,
+                            itemBuilder: (context, i) => _buildTxnTile(_transactions[i]),
+                          ),
+                  ),
           ),
         ],
       ),
@@ -238,7 +263,6 @@ class _TransactionsScreenState extends ConsumerState<TransactionsScreen> {
     final isDebit = txn.transactionType == 'DEBIT';
     final isTransfer = txn.transactionType == 'TRANSFER';
     final amountColor = isTransfer ? AppColors.info : (isDebit ? AppColors.expense : AppColors.income);
-
     return GlassCard(
       child: ListTile(
         onTap: () => _editTransaction(txn),
@@ -302,6 +326,7 @@ class _TransactionsScreenState extends ConsumerState<TransactionsScreen> {
             ],
             onChanged: (v) { setState(() => _filterSort = v); _loadData(); },
           ),
+          const SizedBox(width: 8),
           const SizedBox(width: 8),
           _buildDropdown<int>(
             context: context,

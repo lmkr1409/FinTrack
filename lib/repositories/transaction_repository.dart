@@ -186,6 +186,18 @@ class TransactionRepository extends BaseRepository<Transaction> {
     return database.delete('"transaction"', where: 'card_id = ?', whereArgs: [cardId]);
   }
 
+  /// Delete all transactions for a specific account.
+  Future<int> deleteByAccountId(int accountId) async {
+    final database = await db;
+    return database.delete('"transaction"', where: 'account_id = ?', whereArgs: [accountId]);
+  }
+
+  /// Delete all transactions for a specific category.
+  Future<int> deleteByCategoryId(int categoryId) async {
+    final database = await db;
+    return database.delete('"transaction"', where: 'category_id = ?', whereArgs: [categoryId]);
+  }
+
   /// Delete ALL transactions in the table.
   Future<int> deleteAll() async {
     final database = await db;

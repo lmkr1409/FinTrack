@@ -91,10 +91,10 @@ class AnalyticsService {
   Future<List<Map<String, dynamic>>> expensePerDay(String start, String end) async {
     final db = await _db.database;
     return db.rawQuery(
-      'SELECT transaction_date as period, COALESCE(SUM(amount),0) as total '
+      'SELECT substr(transaction_date, 1, 10) as period, COALESCE(SUM(amount),0) as total '
       'FROM "transaction" WHERE transaction_type=\'DEBIT\' '
-      'AND transaction_date>=? AND transaction_date<=? '
-      'GROUP BY transaction_date ORDER BY transaction_date',
+      'AND substr(transaction_date, 1, 10)>=? AND substr(transaction_date, 1, 10)<=? '
+      'GROUP BY period ORDER BY period',
       [start, end],
     );
   }
@@ -229,24 +229,65 @@ class AnalyticsService {
     };
   }
 
-  Future<List<Map<String, dynamic>>> budgetVsActual(int month, int year) async {
+  Future<List<Map<String, dynamic>>> budgetVsActual(int month, int year, {String categoryType = 'EXPENSE'}) async {
     final db = await _db.database;
     final start = '$year-${month.toString().padLeft(2, '0')}-01';
     final endMonth = month == 12 ? 1 : month + 1;
     final endYear = month == 12 ? year + 1 : year;
     final end = '$endYear-${endMonth.toString().padLeft(2, '0')}-01';
 
-    return db.rawQuery(
-      'SELECT b.budget_id, b.budget_amount, c.category_id, c.category_name, c.icon, c.icon_color, '
-      'COALESCE(('
-      '  SELECT SUM(t.amount) FROM "transaction" t '
-      '  WHERE t.category_id=b.category_id AND t.transaction_type=\'DEBIT\' '
-      '  AND t.transaction_date>=? AND t.transaction_date<? '
-      '),0) as actual '
-      'FROM budget b LEFT JOIN category c ON b.category_id=c.category_id '
-      'WHERE b.budget_frequency=\'MONTHLY\' AND b.month=? AND b.year=?',
-      [start, end, month, year],
-    );
+    String transactionTypeFilter = 'DEBIT';
+    if (categoryType == 'INCOME') transactionTypeFilter = 'CREDIT';
+    if (categoryType == 'TRANSFER') transactionTypeFilter = 'TRANSFER';
+
+    final result = await db.rawQuery('''
+      SELECT 
+        c.category_id, 
+        c.category_name, 
+        c.icon, 
+        c.icon_color, 
+        c.category_type,
+        COALESCE(bm.budget_amount, 0) as budget_amount, -- Monthly
+        COALESCE(ba.budget_amount, 0) as budget_amount_annual, -- Yearly
+        COALESCE((
+          SELECT SUM(t.amount) FROM "transaction" t 
+          WHERE t.category_id = c.category_id AND t.transaction_type = ? 
+          AND t.transaction_date >= ? AND t.transaction_date < ?
+        ), 0) as actual
+      FROM category c
+      LEFT JOIN budget bm ON c.category_id = bm.category_id 
+        AND bm.budget_frequency = 'MONTHLY' AND bm.month = ? AND bm.year = ?
+      LEFT JOIN budget ba ON c.category_id = ba.category_id 
+        AND ba.budget_frequency = 'ANNUAL' AND ba.year = ?
+      WHERE c.category_type = ?
+    ''', [transactionTypeFilter, start, end, month, year, year, categoryType]);
+
+    // Convert to mutable maps to add global budget info if needed
+    final list = List<Map<String, dynamic>>.from(result.map((e) => Map<String, dynamic>.from(e)));
+
+    if (categoryType == 'EXPENSE') {
+      // Add Global Budget as a special entry with category_id = null
+      final globalBudget = await db.rawQuery(
+        'SELECT budget_amount FROM budget_total WHERE budget_frequency = \'MONTHLY\' AND month = ? AND year = ?',
+        [month, year]
+      );
+      if (globalBudget.isNotEmpty) {
+        // We calculate total actual expenses for the month
+        final totalActual = await db.rawQuery(
+          'SELECT SUM(amount) as total FROM "transaction" WHERE transaction_type = \'DEBIT\' AND transaction_date >= ? AND transaction_date < ?',
+          [start, end]
+        );
+        list.add({
+          'category_id': null,
+          'category_name': 'Total Budget',
+          'budget_amount': (globalBudget.first['budget_amount'] as num).toDouble(),
+          'actual': (totalActual.first['total'] as num?)?.toDouble() ?? 0.0,
+          'category_type': 'EXPENSE',
+        });
+      }
+    }
+
+    return list;
   }
 
   // ─── Expense Breakdowns (Pie Charts) ────────────────────
@@ -255,6 +296,7 @@ class AnalyticsService {
     final db = await _db.database;
     return db.rawQuery('''
       SELECT 
+        c.category_id as id,
         COALESCE(c.category_name, 'Uncategorized') as name,
         COALESCE(c.icon_color, '#9E9E9E') as color,
         SUM(t.amount) as value
@@ -271,8 +313,24 @@ class AnalyticsService {
     final db = await _db.database;
     return db.rawQuery('''
       SELECT 
+        COALESCE(p.payment_method_name, 'Unknown Method') as name,
+        COALESCE(p.icon_color, '#607D8B') as color,
+        SUM(t.amount) as value
+      FROM "transaction" t
+      LEFT JOIN payment_method p ON t.payment_method_id = p.payment_method_id
+      WHERE t.transaction_type = 'DEBIT' AND t.transaction_date >= ? AND t.transaction_date <= ?
+      GROUP BY p.payment_method_id
+      HAVING value > 0
+      ORDER BY value DESC
+    ''', [start, end]);
+  }
+
+  Future<List<Map<String, dynamic>>> expensesByAccount(String start, String end) async {
+    final db = await _db.database;
+    return db.rawQuery('''
+      SELECT 
         COALESCE(a.account_name, 'Unknown Account') as name,
-        COALESCE(a.icon_color, '#607D8B') as color,
+        COALESCE(a.icon_color, '#1E88E5') as color,
         SUM(t.amount) as value
       FROM "transaction" t
       LEFT JOIN account a ON t.account_id = a.account_id
@@ -281,6 +339,38 @@ class AnalyticsService {
       HAVING value > 0
       ORDER BY value DESC
     ''', [start, end]);
+  }
+
+  Future<List<Map<String, dynamic>>> expensesByCard(String start, String end) async {
+    final db = await _db.database;
+    return db.rawQuery('''
+      SELECT 
+        COALESCE(c.card_name, 'Unknown Card') as name,
+        COALESCE(c.icon_color, '#FF9800') as color,
+        SUM(t.amount) as value
+      FROM "transaction" t
+      LEFT JOIN cards c ON t.card_id = c.card_id
+      WHERE t.transaction_type = 'DEBIT' AND t.transaction_date >= ? AND t.transaction_date <= ?
+      GROUP BY c.card_id
+      HAVING value > 0
+      ORDER BY value DESC
+    ''', [start, end]);
+  }
+
+  Future<List<Map<String, dynamic>>> expensesBySubCategory(String start, String end, int categoryId) async {
+    final db = await _db.database;
+    return db.rawQuery('''
+      SELECT 
+        COALESCE(s.subcategory_name, 'Uncategorized') as name,
+        COALESCE(s.icon_color, '#9E9E9E') as color,
+        SUM(t.amount) as value
+      FROM "transaction" t
+      LEFT JOIN sub_category s ON t.subcategory_id = s.subcategory_id
+      WHERE t.transaction_type = 'DEBIT' AND t.transaction_date >= ? AND t.transaction_date <= ? AND t.category_id = ?
+      GROUP BY s.subcategory_id
+      HAVING value > 0
+      ORDER BY value DESC
+    ''', [start, end, categoryId]);
   }
 
   Future<List<Map<String, dynamic>>> expensesByPurpose(String start, String end) async {

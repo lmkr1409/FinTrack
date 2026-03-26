@@ -10,7 +10,9 @@ import '../repositories/merchant_repository.dart';
 import '../repositories/payment_method_repository.dart';
 import '../repositories/sub_category_repository.dart';
 import '../repositories/transaction_repository.dart';
-import '../repositories/labeling_rule_repository.dart';
+import '../repositories/merchant_rule_repository.dart';
+import '../repositories/transaction_rule_repository.dart';
+import '../repositories/budget_total_repository.dart';
 
 // ─── Repository Providers ────────────────────────────────────────────
 
@@ -54,6 +56,14 @@ final budgetRepositoryProvider = Provider<BudgetRepository>((ref) {
   return BudgetRepository();
 });
 
-final labelingRuleRepositoryProvider = Provider<LabelingRuleRepository>((ref) {
-  return LabelingRuleRepository();
+final merchantRuleRepositoryProvider = Provider<MerchantRuleRepository>((ref) {
+  return MerchantRuleRepository();
+});
+
+final transactionRuleRepositoryProvider = Provider<TransactionRuleRepository>((ref) {
+  return TransactionRuleRepository();
+});
+
+final budgetTotalRepositoryProvider = Provider<BudgetTotalRepository>((ref) {
+  return BudgetTotalRepository();
 });

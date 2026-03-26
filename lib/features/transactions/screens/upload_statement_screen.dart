@@ -142,8 +142,11 @@ class _UploadStatementScreenState extends ConsumerState<UploadStatementScreen> {
       final accounts = await accountRepo.getAllSorted();
 
       // Load labeling rules
-      final rulesRepo = ref.read(labelingRuleRepositoryProvider);
-      final labelingRules = await rulesRepo.getAllSorted();
+      final mRepo = ref.read(merchantRuleRepositoryProvider);
+      final mRules = await mRepo.getAllSorted();
+      
+      final tRepo = ref.read(transactionRuleRepositoryProvider);
+      final tRules = await tRepo.getAllSorted();
 
       // Determine default accountId from the selected card
       int? defaultAccountId;
@@ -221,7 +224,7 @@ class _UploadStatementScreenState extends ConsumerState<UploadStatementScreen> {
           updatedTime: now,
           labeled: false,
         );
-        return LabelingRulesService.applyRules(txn, labelingRules);
+        return LabelingRulesService.applyRules(txn, tRules, mRules);
       }).toList();
 
       await txnRepo.insertBatch(transactions);

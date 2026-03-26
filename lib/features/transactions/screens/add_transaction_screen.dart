@@ -39,6 +39,9 @@ class _AddTransactionScreenState extends ConsumerState<AddTransactionScreen> {
   int? _paymentMethodId;
   int? _purposeId;
   int? _expenseSourceId;
+  int? _toAccountId;
+  int? _toCardId;
+  String _transferType = 'DEBIT'; // 'DEBIT', 'CREDIT', 'SELF'
 
   // Lookup data
   List<Category> _categories = [];
@@ -57,6 +60,13 @@ class _AddTransactionScreenState extends ConsumerState<AddTransactionScreen> {
     super.initState();
     _dateCtrl.text = DateFormat('yyyy-MM-dd').format(DateTime.now());
     _loadLookups();
+  }
+
+  String get _currentCategoryType {
+    if (_transactionType == 'DEBIT') return 'EXPENSE';
+    if (_transactionType == 'CREDIT') return 'INCOME';
+    if (_transactionType == 'TRANSFER' && _transferType == 'CREDIT') return 'INCOME';
+    return 'EXPENSE'; // Default for other transfers
   }
 
   Future<void> _loadLookups() async {
@@ -106,22 +116,73 @@ class _AddTransactionScreenState extends ConsumerState<AddTransactionScreen> {
     final amount = double.tryParse(_amountCtrl.text);
     if (amount == null || amount <= 0) return;
 
-    final txn = Transaction(
-      transactionType: _transactionType,
-      amount: amount,
-      transactionDate: _dateCtrl.text,
-      description: _descCtrl.text.trim().isNotEmpty ? _descCtrl.text.trim() : null,
-      categoryId: _categoryId,
-      subcategoryId: _subcategoryId,
-      accountId: _accountId,
-      cardId: _cardId,
-      merchantId: _merchantId,
-      paymentMethodId: _paymentMethodId,
-      purposeId: _purposeId,
-      expenseSourceId: _expenseSourceId,
-    );
+    final repo = ref.read(transactionRepositoryProvider);
 
-    await ref.read(transactionRepositoryProvider).insertTransaction(txn);
+    if (_transactionType == 'TRANSFER' && _transferType == 'SELF') {
+      if (_toAccountId == null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Please select a destination Account')),
+        );
+        return;
+      }
+
+      // 1. Create the "From" side transaction
+      final fromAccName = _accounts.where((a) => a.id == _accountId).firstOrNull?.accountName ?? 'Source';
+      final toAccName = _accounts.where((a) => a.id == _toAccountId).firstOrNull?.accountName ?? 'Destination';
+
+      final fromTxn = Transaction(
+        transactionType: 'TRANSFER',
+        amount: amount,
+        transactionDate: _dateCtrl.text,
+        description: 'Self Transfer from $fromAccName to $toAccName',
+        categoryId: _categoryId,
+        subcategoryId: _subcategoryId,
+        accountId: _accountId,
+        cardId: _cardId,
+        labeled: true,
+        isAutoLabeled: false,
+      );
+
+      final fromId = await repo.insertTransaction(fromTxn);
+
+      // 2. Create the "To" side transaction (Linked)
+      final toTxn = Transaction(
+        transactionType: 'TRANSFER',
+        amount: amount,
+        transactionDate: _dateCtrl.text,
+        description: 'Self Transfer from $fromAccName to $toAccName',
+        accountId: _toAccountId,
+        cardId: _toCardId,
+        labeled: true,
+        isAutoLabeled: false,
+        relatedTransactionId: fromId,
+      );
+
+      final toId = await repo.insertTransaction(toTxn);
+
+      // 3. Update the "From" side with the relation
+      await repo.updateTransaction(fromTxn.copyWith(id: fromId, relatedTransactionId: toId));
+    } else {
+      // Standard transaction
+      final txn = Transaction(
+        transactionType: _transactionType,
+        amount: amount,
+        transactionDate: _dateCtrl.text,
+        description: _descCtrl.text.trim().isNotEmpty ? _descCtrl.text.trim() : null,
+        categoryId: _categoryId,
+        subcategoryId: _subcategoryId,
+        accountId: _accountId,
+        cardId: _cardId,
+        merchantId: _merchantId,
+        paymentMethodId: _paymentMethodId,
+        purposeId: _purposeId,
+        expenseSourceId: _expenseSourceId,
+        labeled: _categoryId != null, // Mark as labeled if category is selected
+      );
+
+      await repo.insertTransaction(txn);
+    }
+
     if (mounted) Navigator.pop(context, true);
   }
 
@@ -198,10 +259,74 @@ class _AddTransactionScreenState extends ConsumerState<AddTransactionScreen> {
               segments: const [
                 ButtonSegment(value: 'DEBIT', label: Text('Debit'), icon: Icon(Icons.arrow_upward_rounded, size: 18)),
                 ButtonSegment(value: 'CREDIT', label: Text('Credit'), icon: Icon(Icons.arrow_downward_rounded, size: 18)),
+                ButtonSegment(value: 'TRANSFER', label: Text('Transfer'), icon: Icon(Icons.swap_horiz_rounded, size: 18)),
               ],
               selected: {_transactionType},
-              onSelectionChanged: (s) => setState(() => _transactionType = s.first),
+              onSelectionChanged: (s) {
+                final newType = s.first;
+                if (newType != _transactionType) {
+                  setState(() {
+                    _transactionType = newType;
+                    _categoryId = null;
+                    _subcategoryId = null;
+                    _subCategories = [];
+                  });
+                }
+              },
             ),
+            if (_transactionType == 'TRANSFER') ...[
+              const SizedBox(height: 16),
+              const Text('Transfer Type', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: AppColors.primary)),
+              const SizedBox(height: 8),
+              SegmentedButton<String>(
+                segments: const [
+                  ButtonSegment(value: 'DEBIT', label: Text('Outgoing'), icon: Icon(Icons.outbound_rounded, size: 16)),
+                  ButtonSegment(value: 'CREDIT', label: Text('Incoming'), icon: Icon(Icons.login_rounded, size: 16)),
+                  ButtonSegment(value: 'SELF', label: Text('Self'), icon: Icon(Icons.swap_horiz_rounded, size: 16)),
+                ],
+                selected: {_transferType},
+                onSelectionChanged: (s) => setState(() {
+                  _transferType = s.first;
+                  if (_transferType == 'SELF') {
+                    _categoryId = _categories.where((c) => c.categoryName == 'Self Transfer').firstOrNull?.id;
+                  } else if (_transferType == 'DEBIT') {
+                    _categoryId = _categories.where((c) => c.categoryName == 'Investments').firstOrNull?.id;
+                  }
+                }),
+              ),
+              if (_transferType == 'SELF') ...[
+                const SizedBox(height: 16),
+                const Text('To Account / Card', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: AppColors.primary)),
+                const SizedBox(height: 8),
+                AutocompleteField<Account>(
+                  label: 'Destination Account',
+                  initialItem: _toAccountId == null ? null : _accounts.where((a) => a.id == _toAccountId).firstOrNull,
+                  items: _accounts.where((a) => a.id != _accountId).toList(),
+                  displayStringForOption: (a) => a.accountName,
+                  onChanged: (a) => setState(() => _toAccountId = a?.id),
+                  onAddNew: (text) => _addNew<Account>(
+                    'Account',
+                    text,
+                    (name) => ref.read(accountRepositoryProvider).insert(Account(accountName: name, balance: 0, icon: 'buildingColumns', iconColor: ColorHelper.toHex(Colors.blue), priority: 99).toMap()).then((id) => Account(id: id, accountName: name, balance: 0, icon: 'buildingColumns', iconColor: ColorHelper.toHex(Colors.blue), priority: 99)),
+                    (a) => setState(() => _toAccountId = a.id),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                AutocompleteField<model.Card>(
+                  label: 'Destination Card',
+                  initialItem: _toCardId == null ? null : _cards.where((c) => c.id == _toCardId).firstOrNull,
+                  items: _cards.where((c) => c.accountId == _toAccountId).toList(),
+                  displayStringForOption: (c) => c.cardName,
+                  onChanged: (c) => setState(() => _toCardId = c?.id),
+                  onAddNew: (text) => _addNew<model.Card>(
+                    'Card',
+                    text,
+                    (name) => ref.read(cardRepositoryProvider).insert(model.Card(accountId: _toAccountId, cardName: name, cardType: 'Credit', cardNumber: '0000', cardExpiryDate: '12/99', cardNetwork: 'Visa', balance: 0, priority: 99).toMap()).then((id) => model.Card(id: id, accountId: _toAccountId, cardName: name, cardType: 'Credit', cardNumber: '0000', cardExpiryDate: '12/99', cardNetwork: 'Visa', balance: 0, priority: 99)),
+                    (c) => setState(() => _toCardId = c.id),
+                  ),
+                ),
+              ],
+            ],
             const SizedBox(height: 16),
 
             // Amount
@@ -236,7 +361,7 @@ class _AddTransactionScreenState extends ConsumerState<AddTransactionScreen> {
             AutocompleteField<Category>(
               label: 'Category',
               initialItem: _categoryId == null ? null : _categories.where((c) => c.id == _categoryId).firstOrNull,
-              items: _categories,
+              items: _categories.where((c) => c.categoryType == _currentCategoryType).toList(),
               displayStringForOption: (c) => c.categoryName,
               onChanged: (c) {
                 setState(() => _categoryId = c?.id);

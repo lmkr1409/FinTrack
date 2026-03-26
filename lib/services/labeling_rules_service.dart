@@ -3,18 +3,18 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 
 import '../models/transaction.dart';
-import '../models/labeling_rule.dart';
+import '../models/merchant_rule.dart';
+import '../models/transaction_rule.dart';
 import '../services/providers.dart';
 
 class LabelingRulesService {
   /// Applies rules from the database to auto-label a transaction based on its description.
   /// Returns a modified copy of the transaction with mapped fields and `isAutoLabeled` set to true.
-  static Transaction applyRules(Transaction txn, List<LabelingRule> rules) {
+  static Transaction applyRules(Transaction txn, List<TransactionRule> tRules, List<MerchantRule> mRules) {
     if (txn.description == null || txn.description!.isEmpty) return txn;
     
-    final desc = txn.description!.toLowerCase();
+    final lower = txn.description!.toLowerCase();
     
-    // Default assignments
     String txnType = txn.transactionType;
     int? catId = txn.categoryId;
     int? subCatId = txn.subcategoryId;
@@ -26,28 +26,51 @@ class LabelingRulesService {
     int? cardId = txn.cardId;
     bool matched = false;
 
-    // Evaluate rules sequentially, first match priority.
-    // If you want all to apply in order, don't break, just let them overwrite.
-    for (final rule in rules) {
-      if (desc.contains(rule.keyword.toLowerCase())) {
+    // 1. Transaction Rules
+    final typeRules = tRules.where((r) => r.ruleType == 'TRANSACTION_TYPE');
+    for (var rule in typeRules) {
+      if (lower.contains(rule.pattern.toLowerCase())) {
+        txnType = rule.mappedType!;
         matched = true;
-        
-        if (rule.transactionType != null && rule.transactionType!.isNotEmpty) {
-           txnType = rule.transactionType!;
-        }
+        break;
+      }
+    }
+
+    final methodRules = tRules.where((r) => r.ruleType == 'PAYMENT_METHOD');
+    for (var rule in methodRules) {
+      if (lower.contains(rule.pattern.toLowerCase())) {
+        paymentId = rule.paymentMethodId;
+        matched = true;
+        break;
+      }
+    }
+
+    final accountRules = tRules.where((r) => r.ruleType == 'ACCOUNT');
+    for (var rule in accountRules) {
+      if (lower.contains(rule.pattern.toLowerCase())) {
+        if (accountId == null) accountId = rule.accountId;
+        matched = true;
+        break;
+      }
+    }
+
+    final cardRules = tRules.where((r) => r.ruleType == 'CARD');
+    for (var rule in cardRules) {
+      if (lower.contains(rule.pattern.toLowerCase())) {
+        if (cardId == null) cardId = rule.cardId;
+        matched = true;
+        break;
+      }
+    }
+
+    // 2. Merchant Rules
+    for (var rule in mRules) {
+      if (lower.contains(rule.keyword.toLowerCase())) {
+        if (rule.merchantId != null) merchId = rule.merchantId;
         if (rule.categoryId != null) catId = rule.categoryId;
         if (rule.subcategoryId != null) subCatId = rule.subcategoryId;
-        if (rule.merchantId != null) merchId = rule.merchantId;
-        if (rule.paymentMethodId != null) paymentId = rule.paymentMethodId;
-        if (rule.expenseSourceId != null) expenseSourceId = rule.expenseSourceId;
         if (rule.purposeId != null) purposeId = rule.purposeId;
-        
-        // Note: As per user request, we do NOT overwrite Account/Card configured during statement upload.
-        // If they are null, we can try to apply from rule, else stick to uploaded account.
-        if (accountId == null && rule.accountId != null) accountId = rule.accountId;
-        if (cardId == null && rule.cardId != null) cardId = rule.cardId;
-
-        // Found a matching rule
+        matched = true;
         break;
       }
     }
@@ -71,15 +94,19 @@ class LabelingRulesService {
     return txn;
   }
 
-  /// Shows a dialog to prompt the user about overidding behavior, then mass-applies rules to the database.
-  static Future<void> promptAndApplyRules(BuildContext context, WidgetRef ref) async {
+  /// Shows a dialog to prompt the user about overriding behavior, then mass-applies rules to the database.
+  static Future<void> promptAndApplyRules(BuildContext context, WidgetRef ref, {bool applyTransactions = true, bool applyMerchants = true}) async {
+    final title = applyTransactions && applyMerchants 
+        ? 'Apply All Rules'
+        : (applyTransactions ? 'Apply Transaction Rules' : 'Apply Merchant Rules');
+
     final override = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Apply Rules to All Transactions'),
+        title: Text(title),
         content: const Text(
-          'Do you want to override existing transaction configurations, or only fill in the missing ones?\n\n'
-          '• Override: Replaces existing categories, merchants, etc. if the matching rule defines them.\n'
+          'Do you want to update all unlabeled transactions, or only fill in their missing details?\n\n'
+          '• Update All: Replaces existing categories, merchants, etc. if a matching rule defines them.\n'
           '• Fill Missing: Only updates fields that are currently empty.'
         ),
         actions: [
@@ -94,7 +121,7 @@ class LabelingRulesService {
           FilledButton(
             style: FilledButton.styleFrom(backgroundColor: Theme.of(context).colorScheme.primary),
             onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('Override'),
+            child: const Text('Update All'),
           ),
         ],
       ),
@@ -110,7 +137,7 @@ class LabelingRulesService {
       builder: (_) => const Center(child: CircularProgressIndicator()),
     );
 
-    final updatedCount = await _massApplyRules(ref, override: override);
+    final updatedCount = await _massApplyRules(ref, override: override, applyTransactions: applyTransactions, applyMerchants: applyMerchants);
 
     if (context.mounted) {
       Navigator.pop(context); // hide loading
@@ -121,95 +148,141 @@ class LabelingRulesService {
   }
 
   /// Mass-applies existing rules to all transactions in the DB.
-  static Future<int> _massApplyRules(WidgetRef ref, {required bool override}) async {
-    final rulesRepo = ref.read(labelingRuleRepositoryProvider);
-    final rules = await rulesRepo.getAllSorted();
-    if (rules.isEmpty) return 0;
+  static Future<int> _massApplyRules(WidgetRef ref, {required bool override, bool applyTransactions = true, bool applyMerchants = true}) async {
+    final mRepo = ref.read(merchantRuleRepositoryProvider);
+    final mRules = await mRepo.getAllSorted();
+    
+    final tRepo = ref.read(transactionRuleRepositoryProvider);
+    final tRules = await tRepo.getAllSorted();
+
+    if ((!applyMerchants || mRules.isEmpty) && (!applyTransactions || tRules.isEmpty)) return 0;
 
     final txnRepo = ref.read(transactionRepositoryProvider);
-    final allTxns = await txnRepo.getAll();
+    // Only get transactions that are not manually labeled by the user
+    final allTxns = await txnRepo.getFiltered(labeled: false);
     if (allTxns.isEmpty) return 0;
-
     List<Transaction> updatedTxns = [];
+    int matchCount = 0;
 
     for (final txn in allTxns) {
       if (txn.description == null || txn.description!.isEmpty) continue;
-      final desc = txn.description!.toLowerCase();
+      
+      bool hasAllDetails = (txn.categoryId != null &&
+                            txn.subcategoryId != null &&
+                            txn.merchantId != null &&
+                            txn.paymentMethodId != null &&
+                            txn.expenseSourceId != null &&
+                            txn.purposeId != null &&
+                            txn.accountId != null &&
+                            txn.cardId != null);
+                            
+      if (!override && hasAllDetails) continue;
+
+      final lower = txn.description!.toLowerCase();
 
       bool matchedOne = false;
       Transaction currentTxn = txn;
 
-      for (final rule in rules) {
-        if (desc.contains(rule.keyword.toLowerCase())) {
-          matchedOne = true;
-          
-          String newTxnType = currentTxn.transactionType;
-          int? newCatId = currentTxn.categoryId;
-          int? newSubCatId = currentTxn.subcategoryId;
-          int? newMerchId = currentTxn.merchantId;
-          int? newPaymentId = currentTxn.paymentMethodId;
-          int? newSourceId = currentTxn.expenseSourceId;
-          int? newPurposeId = currentTxn.purposeId;
-          int? newAccountId = currentTxn.accountId;
-          int? newCardId = currentTxn.cardId;
+      String? newTxnType = txn.transactionType;
+      int? newCatId = txn.categoryId;
+      int? newSubCatId = txn.subcategoryId;
+      int? newMerchId = txn.merchantId;
+      int? newPaymentId = txn.paymentMethodId;
+      int? newSourceId = txn.expenseSourceId;
+      int? newPurposeId = txn.purposeId;
+      int? newAccountId = txn.accountId;
+      int? newCardId = txn.cardId;
 
-          if (rule.transactionType != null && rule.transactionType!.isNotEmpty) {
-            newTxnType = rule.transactionType!;
+      if (applyTransactions) {
+        // 1. Transaction Rules
+        final amountRules = tRules.where((r) => r.ruleType == 'AMOUNT_REGEX');
+        for (var rule in amountRules) {
+          try {
+            final regex = RegExp(rule.pattern, caseSensitive: false);
+            if (regex.hasMatch(txn.description!)) {
+              matchedOne = true;
+              break;
+            }
+          } catch (_) {}
+        }
+
+        final typeRules = tRules.where((r) => r.ruleType == 'TRANSACTION_TYPE');
+        for (var rule in typeRules) {
+          if (lower.contains(rule.pattern.toLowerCase())) {
+            if (override || newTxnType == null) newTxnType = rule.mappedType;
+            matchedOne = true;
+            break;
           }
-          if (rule.categoryId != null) {
-            if (override || newCatId == null) newCatId = rule.categoryId;
-          }
-          if (rule.subcategoryId != null) {
-            if (override || newSubCatId == null) newSubCatId = rule.subcategoryId;
-          }
-          if (rule.merchantId != null) {
-            if (override || newMerchId == null) newMerchId = rule.merchantId;
-          }
-          if (rule.paymentMethodId != null) {
+        }
+
+        final methodRules = tRules.where((r) => r.ruleType == 'PAYMENT_METHOD');
+        for (var rule in methodRules) {
+          if (lower.contains(rule.pattern.toLowerCase())) {
             if (override || newPaymentId == null) newPaymentId = rule.paymentMethodId;
+            matchedOne = true;
+            break;
           }
-          if (rule.expenseSourceId != null) {
-            if (override || newSourceId == null) newSourceId = rule.expenseSourceId;
-          }
-          if (rule.purposeId != null) {
-            if (override || newPurposeId == null) newPurposeId = rule.purposeId;
-          }
-          if (rule.accountId != null) {
+        }
+
+        final accountRules = tRules.where((r) => r.ruleType == 'ACCOUNT');
+        for (var rule in accountRules) {
+          if (lower.contains(rule.pattern.toLowerCase())) {
             if (override || newAccountId == null) newAccountId = rule.accountId;
+            matchedOne = true;
+            break;
           }
-          if (rule.cardId != null) {
+        }
+
+        final cardRules = tRules.where((r) => r.ruleType == 'CARD');
+        for (var rule in cardRules) {
+          if (lower.contains(rule.pattern.toLowerCase())) {
             if (override || newCardId == null) newCardId = rule.cardId;
+            matchedOne = true;
+            break;
           }
-
-          bool changed = (newTxnType != currentTxn.transactionType) ||
-                         (newCatId != currentTxn.categoryId) ||
-                         (newSubCatId != currentTxn.subcategoryId) ||
-                         (newMerchId != currentTxn.merchantId) ||
-                         (newPaymentId != currentTxn.paymentMethodId) ||
-                         (newSourceId != currentTxn.expenseSourceId) ||
-                         (newPurposeId != currentTxn.purposeId) ||
-                         (newAccountId != currentTxn.accountId) ||
-                         (newCardId != currentTxn.cardId);
-
-          if (changed) {
-             currentTxn = currentTxn.copyWith(
-               transactionType: newTxnType,
-               categoryId: newCatId,
-               subcategoryId: newSubCatId,
-               merchantId: newMerchId,
-               paymentMethodId: newPaymentId,
-               expenseSourceId: newSourceId,
-               purposeId: newPurposeId,
-               accountId: newAccountId,
-               cardId: newCardId,
-             );
-          }
-          
-          break; // only apply first matching rule per transaction
         }
       }
 
-      if (matchedOne && currentTxn != txn) {
+      if (applyMerchants) {
+        // 2. Merchant Rules
+        for (var rule in mRules) {
+          if (lower.contains(rule.keyword.toLowerCase())) {
+            if (rule.merchantId != null && (override || newMerchId == null)) newMerchId = rule.merchantId;
+            if (rule.categoryId != null && (override || newCatId == null)) newCatId = rule.categoryId;
+            if (rule.subcategoryId != null && (override || newSubCatId == null)) newSubCatId = rule.subcategoryId;
+            if (rule.purposeId != null && (override || newPurposeId == null)) newPurposeId = rule.purposeId;
+            matchedOne = true;
+            break;
+          }
+        }
+      }
+
+      bool changed = (newTxnType != currentTxn.transactionType) ||
+                     (newCatId != currentTxn.categoryId) ||
+                     (newSubCatId != currentTxn.subcategoryId) ||
+                     (newMerchId != currentTxn.merchantId) ||
+                     (newPaymentId != currentTxn.paymentMethodId) ||
+                     (newSourceId != currentTxn.expenseSourceId) ||
+                     (newPurposeId != currentTxn.purposeId) ||
+                     (newAccountId != currentTxn.accountId) ||
+                     (newCardId != currentTxn.cardId);
+
+      if (changed) {
+         currentTxn = currentTxn.copyWith(
+           transactionType: newTxnType,
+           categoryId: newCatId,
+           subcategoryId: newSubCatId,
+           merchantId: newMerchId,
+           paymentMethodId: newPaymentId,
+           expenseSourceId: newSourceId,
+           purposeId: newPurposeId,
+           accountId: newAccountId,
+           cardId: newCardId,
+         );
+      }
+      
+      if (matchedOne) {
+        matchCount++;
         updatedTxns.add(currentTxn.copyWith(
           isAutoLabeled: true,
           updatedTime: DateFormat('yyyy-MM-dd HH:mm:ss').format(DateTime.now()),
@@ -220,6 +293,8 @@ class LabelingRulesService {
     if (updatedTxns.isNotEmpty) {
       await txnRepo.updateBatch(updatedTxns);
     }
-    return updatedTxns.length;
+
+    return matchCount;
   }
 }
+

@@ -75,21 +75,92 @@ class DatabaseService {
         )
       ''');
     }
+    if (oldVersion < 5) {
+      await db.execute('DROP TABLE IF EXISTS labeling_rule');
+      await db.execute('''
+        CREATE TABLE IF NOT EXISTS merchant_rule (
+          rule_id INTEGER PRIMARY KEY AUTOINCREMENT,
+          keyword TEXT NOT NULL,
+          merchant_id INTEGER,
+          category_id INTEGER,
+          subcategory_id INTEGER,
+          purpose_id INTEGER,
+          created_time TEXT DEFAULT CURRENT_TIMESTAMP,
+          updated_time TEXT DEFAULT CURRENT_TIMESTAMP,
+          FOREIGN KEY (merchant_id) REFERENCES merchant(merchant_id) ON DELETE SET NULL,
+          FOREIGN KEY (category_id) REFERENCES category(category_id) ON DELETE SET NULL,
+          FOREIGN KEY (subcategory_id) REFERENCES sub_category(subcategory_id) ON DELETE SET NULL,
+          FOREIGN KEY (purpose_id) REFERENCES expense_purpose(purpose_id) ON DELETE SET NULL
+        )
+      ''');
+      await db.execute('''
+        CREATE TABLE IF NOT EXISTS transaction_rule (
+          rule_id INTEGER PRIMARY KEY AUTOINCREMENT,
+          rule_type TEXT NOT NULL,
+          pattern TEXT NOT NULL,
+          mapped_type TEXT,
+          payment_method_id INTEGER,
+          account_id INTEGER,
+          card_id INTEGER,
+          created_time TEXT DEFAULT CURRENT_TIMESTAMP,
+          updated_time TEXT DEFAULT CURRENT_TIMESTAMP,
+          FOREIGN KEY (payment_method_id) REFERENCES payment_method(payment_method_id) ON DELETE SET NULL,
+          FOREIGN KEY (account_id) REFERENCES account(account_id) ON DELETE SET NULL,
+          FOREIGN KEY (card_id) REFERENCES cards(card_id) ON DELETE SET NULL
+        )
+      ''');
+
+      final rules = [
+        "INSERT INTO transaction_rule (rule_type, pattern, mapped_type) VALUES ('TRANSACTION_TYPE', 'debited', 'DEBIT')",
+        "INSERT INTO transaction_rule (rule_type, pattern, mapped_type) VALUES ('TRANSACTION_TYPE', 'paid', 'DEBIT')",
+        "INSERT INTO transaction_rule (rule_type, pattern, mapped_type) VALUES ('TRANSACTION_TYPE', 'spent', 'DEBIT')",
+        "INSERT INTO transaction_rule (rule_type, pattern, mapped_type) VALUES ('TRANSACTION_TYPE', 'sent', 'DEBIT')",
+        "INSERT INTO transaction_rule (rule_type, pattern, mapped_type) VALUES ('TRANSACTION_TYPE', 'deducted', 'DEBIT')",
+        "INSERT INTO transaction_rule (rule_type, pattern, mapped_type) VALUES ('TRANSACTION_TYPE', 'withdrawn', 'DEBIT')",
+        "INSERT INTO transaction_rule (rule_type, pattern, mapped_type) VALUES ('TRANSACTION_TYPE', 'auto pay', 'DEBIT')",
+        "INSERT INTO transaction_rule (rule_type, pattern, mapped_type) VALUES ('TRANSACTION_TYPE', 'txn rs', 'DEBIT')",
+        "INSERT INTO transaction_rule (rule_type, pattern, mapped_type) VALUES ('TRANSACTION_TYPE', 'used', 'DEBIT')",
+        "INSERT INTO transaction_rule (rule_type, pattern, mapped_type) VALUES ('TRANSACTION_TYPE', 'credited', 'CREDIT')",
+        "INSERT INTO transaction_rule (rule_type, pattern, mapped_type) VALUES ('TRANSACTION_TYPE', 'received', 'CREDIT')",
+        "INSERT INTO transaction_rule (rule_type, pattern, mapped_type) VALUES ('TRANSACTION_TYPE', 'deposited', 'CREDIT')",
+        "INSERT INTO transaction_rule (rule_type, pattern, mapped_type) VALUES ('TRANSACTION_TYPE', 'credit card payment', 'TRANSFER')",
+        "INSERT INTO transaction_rule (rule_type, pattern, mapped_type) VALUES ('AMOUNT_REGEX', '(?:(?:[Rr]s\\.?|INR|₹)\\s*([\\d,]+(?:\\.\\d{1,2})?))', NULL)"
+      ];
+      for (var r in rules) {
+        await db.execute(r);
+      }
+    }
+    if (oldVersion < 6) {
+      await db.execute('ALTER TABLE category ADD COLUMN category_type TEXT NOT NULL DEFAULT \'EXPENSE\'');
+      await db.execute('UPDATE category SET category_type = \'INCOME\' WHERE category_name = \'Income\'');
+      await db.execute('UPDATE category SET category_type = \'TRANSFER\' WHERE category_name = \'Transfer\'');
+    }
+    if (oldVersion < 7) {
+      await db.execute('''
+        CREATE TABLE IF NOT EXISTS budget_total (
+          total_id INTEGER PRIMARY KEY AUTOINCREMENT,
+          budget_amount REAL NOT NULL,
+          budget_frequency TEXT NOT NULL,
+          month INTEGER,
+          year INTEGER NOT NULL,
+          created_time TEXT DEFAULT CURRENT_TIMESTAMP,
+          updated_time TEXT DEFAULT CURRENT_TIMESTAMP
+        )
+      ''');
+    }
   }
 
   /// Reads and executes the SQL schema/seed file from assets.
   Future<void> _executeSchemaScript(Database db) async {
-    // Read the SQL file from assets
-    final script = await rootBundle.loadString('assets/database/db.sql');
-    await _runScript(db, script);
+    try {
+      // 1. Execute Data Definition Language (Schema)
+      final ddlScript = await rootBundle.loadString('assets/database/ddl.sql');
+      await _runScript(db, ddlScript);
 
-    if (kDebugMode) {
-      try {
-        final testScript = await rootBundle.loadString('assets/database/test_data.sql');
-        await _runScript(db, testScript);
-      } catch (e) {
-        debugPrint('Error loading test_data.sql: $e');
-      }
+      // 2. Execute Data Manipulation Language (Configurations/Seed Data)
+      final dmlScript = await rootBundle.loadString('assets/database/dml.sql');
+      await _runScript(db, dmlScript);
+    } catch (e) {
     }
   }
 

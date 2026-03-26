@@ -82,7 +82,6 @@ class _AutocompleteFieldState<T extends Object> extends State<AutocompleteField<
                 decoration: InputDecoration(
                   labelText: widget.label,
                   border: const OutlineInputBorder(),
-                  isDense: true,
                   suffixIcon: controller.text.isNotEmpty ? IconButton(
                     icon: const Icon(Icons.clear, size: 18),
                     onPressed: () {

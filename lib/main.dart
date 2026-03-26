@@ -5,11 +5,16 @@ import 'core/constants/app_constants.dart';
 import 'core/theme/app_theme.dart';
 import 'widgets/app_shell.dart';
 
-void main() {
+
+final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
+final ProviderContainer providerContainer = ProviderContainer();
+
+void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   runApp(
-    const ProviderScope(
-      child: FinTrackApp(),
+    UncontrolledProviderScope(
+      container: providerContainer,
+      child: const FinTrackApp(),
     ),
   );
 }
@@ -20,6 +25,7 @@ class FinTrackApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
+      navigatorKey: navigatorKey,
       title: AppConstants.appName,
       debugShowCheckedModeBanner: false,
       theme: AppTheme.darkTheme,

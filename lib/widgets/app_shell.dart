@@ -7,32 +7,104 @@ import '../features/labeling/screens/label_screen.dart';
 import '../features/labeling/screens/labeling_rules_screen.dart';
 import '../features/settings/screens/configuration_screen.dart';
 import '../features/settings/screens/export_import_screen.dart';
-import '../features/transactions/screens/transactions_screen.dart';
-import '../services/labeling_rules_service.dart';
+
+import '../services/sms_listener_service.dart';
 
 /// Root widget: Material 3 Navigation Drawer with themed gradient header.
-class AppShell extends StatefulWidget {
+class AppShell extends ConsumerStatefulWidget {
   const AppShell({super.key});
 
   @override
-  State<AppShell> createState() => _AppShellState();
+  ConsumerState<AppShell> createState() => _AppShellState();
 }
 
-class _AppShellState extends State<AppShell> {
+class _AppShellState extends ConsumerState<AppShell> {
   int _selectedIndex = 0;
+  bool _isSyncingSms = true; // Assume syncing starts on launch
+  int _syncCurrent = 0;
+  int _syncTotal = 0;
 
-  static const _titles = ['Insights', 'Configuration', 'Labeling Rules', 'Transactions', 'Label', 'Backup & Restore'];
+  static const _titles = [
+    'Insights',
+    'Configuration',
+    'Labeling Rules',
+    'Transactions',
+    'Backup & Restore',
+  ];
   static const _screens = <Widget>[
     InsightsScreen(),
     ConfigurationScreen(),
     LabelingRulesScreen(),
-    TransactionsScreen(),
     LabelScreen(),
     ExportImportScreen(),
   ];
 
   @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _startInitialSync();
+    });
+  }
+
+  Future<void> _startInitialSync() async {
+    final container = ProviderScope.containerOf(context);
+    setState(() => _isSyncingSms = true);
+    
+    await SmsListenerService.syncInboxMessages(
+      container,
+      onProgress: (current, total) {
+        if (mounted) {
+          setState(() {
+            _syncCurrent = current;
+            _syncTotal = total;
+          });
+        }
+      },
+    );
+
+    if (mounted) {
+      // Small delay just to show 100% completion briefly if it was long
+      if (_syncTotal > 0) {
+        await Future.delayed(const Duration(milliseconds: 500));
+      }
+      setState(() {
+        _isSyncingSms = false;
+      });
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
+    if (_isSyncingSms) {
+      double progress = _syncTotal > 0 ? _syncCurrent / _syncTotal : 0.0;
+      return Scaffold(
+        backgroundColor: AppColors.background,
+        body: Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const Icon(Icons.account_balance_wallet_rounded, size: 64, color: AppColors.primary),
+              const SizedBox(height: 24),
+              const Text('Syncing Messages...', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: AppColors.textPrimary)),
+              const SizedBox(height: 16),
+              SizedBox(
+                width: 200,
+                child: LinearProgressIndicator(
+                  value: _syncTotal > 0 ? progress : null,
+                  backgroundColor: AppColors.surfaceContainer,
+                  color: AppColors.primary,
+                ),
+              ),
+              const SizedBox(height: 16),
+              if (_syncTotal > 0)
+                Text('$_syncCurrent / $_syncTotal (${(progress * 100).toStringAsFixed(0)}%)', style: const TextStyle(color: AppColors.textMuted)),
+            ],
+          ),
+        ),
+      );
+    }
+
     return Scaffold(
       appBar: AppBar(
         title: Text(_titles[_selectedIndex]),
@@ -42,16 +114,6 @@ class _AppShellState extends State<AppShell> {
             onPressed: () => Scaffold.of(ctx).openDrawer(),
           ),
         ),
-        actions: [
-          if (_selectedIndex == 2)
-            Consumer(
-              builder: (context, ref, _) => IconButton(
-                icon: const Icon(Icons.playlist_add_check_rounded),
-                tooltip: 'Apply Rules',
-                onPressed: () => LabelingRulesService.promptAndApplyRules(context, ref),
-              ),
-            ),
-        ],
       ),
       drawer: NavigationDrawer(
         selectedIndex: _selectedIndex,
@@ -73,10 +135,24 @@ class _AppShellState extends State<AppShell> {
             child: const Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Icon(Icons.account_balance_wallet_rounded, size: 36, color: Colors.white),
+                Icon(
+                  Icons.account_balance_wallet_rounded,
+                  size: 36,
+                  color: Colors.white,
+                ),
                 SizedBox(height: 10),
-                Text('FinTrack', style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: Colors.white)),
-                Text('Personal Finance Tracker', style: TextStyle(fontSize: 12, color: Colors.white70)),
+                Text(
+                  'FinTrack',
+                  style: TextStyle(
+                    fontSize: 22,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.white,
+                  ),
+                ),
+                Text(
+                  'Personal Finance Tracker',
+                  style: TextStyle(fontSize: 12, color: Colors.white70),
+                ),
               ],
             ),
           ),
@@ -100,11 +176,6 @@ class _AppShellState extends State<AppShell> {
             icon: Icon(Icons.receipt_long_outlined),
             selectedIcon: Icon(Icons.receipt_long_rounded),
             label: Text('Transactions'),
-          ),
-          const NavigationDrawerDestination(
-            icon: Icon(Icons.label_important_outline_rounded),
-            selectedIcon: Icon(Icons.label_important_rounded),
-            label: Text('Label'),
           ),
           const NavigationDrawerDestination(
             icon: Icon(Icons.backup_outlined),

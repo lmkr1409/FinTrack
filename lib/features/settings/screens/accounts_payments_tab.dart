@@ -34,8 +34,8 @@ class _AccountsPaymentsTabState extends ConsumerState<AccountsPaymentsTab> {
     _loadData();
   }
 
-  Future<void> _loadData() async {
-    setState(() => _loading = true);
+  Future<void> _loadData({bool showLoading = false}) async {
+    if (showLoading) setState(() => _loading = true);
     final accounts = await ref.read(accountRepositoryProvider).getAllSorted();
     final cards = await ref.read(cardRepositoryProvider).getAllSorted();
     final methods = await ref.read(paymentMethodRepositoryProvider).getAllSorted();

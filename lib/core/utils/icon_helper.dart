@@ -45,6 +45,19 @@ class IconHelper {
     'coffee': Icons.coffee_rounded,
     'nutrition': Icons.egg_rounded,
     'eco': Icons.eco_rounded,
+    'local_drink': Icons.local_drink_rounded,
+    'local_pizza': Icons.local_pizza_rounded,
+    'local_cafe': Icons.local_cafe_rounded,
+    'fastfood': Icons.fastfood_rounded,
+    'cake': Icons.cake_rounded,
+    'icecream': Icons.icecream_rounded,
+    'liquor': Icons.liquor_rounded,
+    'kebab_dining': Icons.kebab_dining_rounded,
+    'ramen_dining': Icons.ramen_dining_rounded,
+    'soup_kitchen': Icons.soup_kitchen_rounded,
+    'tapas': Icons.tapas_rounded,
+    'bento': Icons.bento_rounded,
+    'rice_bowl': Icons.rice_bowl_rounded,
 
     // ─── Transport ────────────────────────────────────────
     'directions_bus': Icons.directions_bus_rounded,
@@ -149,6 +162,11 @@ class IconHelper {
     'engineering': Icons.engineering_rounded,
     'groups': Icons.groups_rounded,
     'handyman': Icons.handyman_rounded,
+    'plumbing': Icons.plumbing_rounded,
+    'electrical_services': Icons.electrical_services_rounded,
+    'pest_control': Icons.pest_control_rounded,
+    'roofing': Icons.roofing_rounded,
+    'hvac': Icons.hvac_rounded,
 
     // ─── Investments & Assets ────────────────────────────────
     'trending_up': Icons.trending_up_rounded,

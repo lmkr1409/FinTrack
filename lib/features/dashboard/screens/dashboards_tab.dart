@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 
 import '../../../core/theme/app_colors.dart';
 import '../../../core/utils/color_helper.dart';
 import '../../../core/utils/icon_helper.dart';
 import '../../../services/analytics_service.dart';
+import '../../../services/sms_listener_service.dart';
 import '../../../widgets/glass_card.dart';
 import '../../../widgets/month_swiper.dart';
 
@@ -40,6 +42,12 @@ class _DashboardsTabState extends State<DashboardsTab> {
   void initState() {
     super.initState();
     _loadData();
+  }
+
+  Future<void> _handleRefresh() async {
+    final container = ProviderScope.containerOf(context);
+    await SmsListenerService.syncInboxMessages(container);
+    await _loadData();
   }
 
   Future<void> _loadData() async {
@@ -106,8 +114,9 @@ class _DashboardsTabState extends State<DashboardsTab> {
     final net = _totalIncome - _totalExpense;
 
     return RefreshIndicator(
-      onRefresh: _loadData,
+      onRefresh: _handleRefresh,
       child: ListView(
+        physics: const AlwaysScrollableScrollPhysics(),
         padding: const EdgeInsets.all(16),
         children: [
           // ─── Gradient balance header ──────────────────

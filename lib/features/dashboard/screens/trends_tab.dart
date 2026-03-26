@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 
 import '../../../core/theme/app_colors.dart';
 import '../../../services/analytics_service.dart';
+import '../../../services/sms_listener_service.dart';
 import '../../../widgets/glass_card.dart';
 import '../../../widgets/month_swiper.dart';
 
@@ -30,6 +32,12 @@ class _TrendsTabState extends State<TrendsTab> {
 
   @override
   void initState() { super.initState(); _loadData(); }
+
+  Future<void> _handleRefresh() async {
+    final container = ProviderScope.containerOf(context);
+    await SmsListenerService.syncInboxMessages(container);
+    await _loadData();
+  }
 
   Future<void> _loadData() async {
     setState(() => _loading = true);
@@ -73,8 +81,9 @@ class _TrendsTabState extends State<TrendsTab> {
   Widget _buildContent() {
     if (_loading) return const Center(child: CircularProgressIndicator());
     return RefreshIndicator(
-      onRefresh: _loadData,
+      onRefresh: _handleRefresh,
       child: ListView(
+        physics: const AlwaysScrollableScrollPhysics(),
         padding: const EdgeInsets.all(16),
         children: [
           const Text('Last 12 Months Insights', style: TextStyle(color: AppColors.textSecondary, fontSize: 13, fontWeight: FontWeight.bold)),
