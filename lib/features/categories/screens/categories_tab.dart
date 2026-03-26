@@ -61,7 +61,10 @@ class _CategoriesTabState extends ConsumerState<CategoriesTab> {
 
   // ─── Category CRUD dialogs ──────────────────────────────
 
-  Future<void> _showCategoryDialog({Category? category, String? defaultType}) async {
+  Future<void> _showCategoryDialog({
+    Category? category,
+    String? defaultType,
+  }) async {
     final nameCtrl = TextEditingController(text: category?.categoryName ?? '');
     final iconCtrl = TextEditingController(text: category?.icon ?? '');
     final colorCtrl = TextEditingController(
@@ -174,7 +177,7 @@ class _CategoriesTabState extends ConsumerState<CategoriesTab> {
 
     if (isEdit) {
       await repo.updateCategory(
-        category.copyWith(
+        category!.copyWith(
           categoryName: name,
           icon: iconCtrl.text.trim(),
           iconColor: colorCtrl.text.trim(),
@@ -375,6 +378,7 @@ class _CategoriesTabState extends ConsumerState<CategoriesTab> {
       await _loadData();
     }
   }
+
   @override
   Widget build(BuildContext context) {
     if (_loading) {
@@ -419,12 +423,7 @@ class _CategoriesTabState extends ConsumerState<CategoriesTab> {
         ],
       ),
       floatingActionButton: FloatingActionButton(
-        onPressed: () {
-          String def = 'EXPENSE';
-          if (_segment == _CategorySegment.income) def = 'INCOME';
-          if (_segment == _CategorySegment.transfers) def = 'TRANSFER';
-          _showCategoryDialog(defaultType: def);
-        },
+        onPressed: () => _showCategoryDialog(),
         child: const Icon(Icons.add),
       ),
     );
@@ -456,142 +455,138 @@ class _CategoriesTabState extends ConsumerState<CategoriesTab> {
       child: ListView.builder(
         physics: const AlwaysScrollableScrollPhysics(),
         padding: const EdgeInsets.only(bottom: 80),
-      itemCount: list.length,
-      itemBuilder: (context, index) {
-        final cat = list[index];
-        final subs = _subCategoriesMap[cat.id!] ?? [];
-        final isExpanded = _expandedIds.contains(cat.id);
+        itemCount: list.length,
+        itemBuilder: (context, index) {
+          final cat = list[index];
+          final subs = _subCategoriesMap[cat.id!] ?? [];
+          final isExpanded = _expandedIds.contains(cat.id);
 
-        return Card(
-          margin: const EdgeInsets.symmetric(
-            horizontal: 12,
-            vertical: 4,
-          ),
-          child: Column(
-            children: [
-              ListTile(
-                leading: CircleAvatar(
-                  backgroundColor: ColorHelper.fromHex(
-                    cat.iconColor,
-                  ).withValues(alpha: 0.15),
-                  child: Icon(
-                    IconHelper.getIcon(cat.icon),
-                    color: ColorHelper.fromHex(cat.iconColor),
+          return Card(
+            margin: const EdgeInsets.symmetric(
+              horizontal: 12,
+              vertical: 4,
+            ),
+            child: Column(
+              children: [
+                ListTile(
+                  leading: CircleAvatar(
+                    backgroundColor: ColorHelper.fromHex(
+                      cat.iconColor,
+                    ).withValues(alpha: 0.15),
+                    child: Icon(
+                      IconHelper.getIcon(cat.icon),
+                      color: ColorHelper.fromHex(cat.iconColor),
+                    ),
                   ),
-                ),
-                title: Text(
-                  cat.categoryName,
-                  style: const TextStyle(fontWeight: FontWeight.w600),
-                ),
-                subtitle: allowSubcategories ? Text('subcategories: ${subs.length}') : null,
-                trailing: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    IconButton(
-                      icon: const Icon(Icons.edit_outlined, size: 20),
-                      onPressed: () =>
-                          _showCategoryDialog(category: cat),
-                    ),
-                    IconButton(
-                      icon: Icon(
-                        Icons.delete_outline,
-                        size: 20,
-                        color: colorScheme.error,
+                  title: Text(
+                    cat.categoryName,
+                    style: const TextStyle(fontWeight: FontWeight.w600),
+                  ),
+                  subtitle: allowSubcategories ? Text('subcategories: ${subs.length}') : null,
+                  trailing: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      IconButton(
+                        icon: const Icon(Icons.edit_outlined, size: 20),
+                        onPressed: () => _showCategoryDialog(category: cat),
                       ),
-                      onPressed: () => _confirmDeleteCategory(cat),
-                    ),
-                    if (allowSubcategories)
                       IconButton(
                         icon: Icon(
-                          isExpanded
-                              ? Icons.expand_less
-                              : Icons.expand_more,
+                          Icons.delete_outline,
+                          size: 20,
+                          color: colorScheme.error,
                         ),
-                        onPressed: () {
-                          setState(() {
-                            if (isExpanded) {
-                              _expandedIds.remove(cat.id);
-                            } else {
-                              _expandedIds.add(cat.id!);
-                            }
-                          });
-                        },
+                        onPressed: () => _confirmDeleteCategory(cat),
                       ),
-                  ],
-                ),
-              ),
-              if (isExpanded && allowSubcategories) ...[
-                const Divider(height: 1),
-                ...subs.map(
-                  (sub) => ListTile(
-                    contentPadding: const EdgeInsets.only(
-                      left: 32,
-                      right: 16,
-                    ),
-                    leading: CircleAvatar(
-                      radius: 16,
-                      backgroundColor: ColorHelper.fromHex(
-                        sub.iconColor,
-                      ).withValues(alpha: 0.15),
-                      child: Icon(
-                        IconHelper.getIcon(sub.icon),
-                        size: 18,
-                        color: ColorHelper.fromHex(sub.iconColor),
-                      ),
-                    ),
-                    title: Text(sub.subcategoryName),
-                    subtitle: Text(
-                      'Priority: ${sub.priority ?? 99}',
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: colorScheme.onSurfaceVariant.withValues(
-                          alpha: 0.7,
-                        ),
-                      ),
-                    ),
-                    trailing: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        IconButton(
-                          icon: const Icon(
-                            Icons.edit_outlined,
-                            size: 18,
-                          ),
-                          onPressed: () => _showSubCategoryDialog(
-                            cat.id!,
-                            subCategory: sub,
-                          ),
-                        ),
+                      if (allowSubcategories)
                         IconButton(
                           icon: Icon(
-                            Icons.delete_outline,
-                            size: 18,
-                            color: colorScheme.error,
+                            isExpanded ? Icons.expand_less : Icons.expand_more,
                           ),
-                          onPressed: () =>
-                              _confirmDeleteSubCategory(sub),
+                          onPressed: () {
+                            setState(() {
+                              if (isExpanded) {
+                                _expandedIds.remove(cat.id);
+                              } else {
+                                _expandedIds.add(cat.id!);
+                              }
+                            });
+                          },
                         ),
-                      ],
-                    ),
+                    ],
                   ),
                 ),
-                Padding(
-                  padding: const EdgeInsets.only(left: 32, bottom: 8),
-                  child: Align(
-                    alignment: Alignment.centerLeft,
-                    child: TextButton.icon(
-                      icon: const Icon(Icons.add, size: 18),
-                      label: const Text('Add SubCategory'),
-                      onPressed: () => _showSubCategoryDialog(cat.id!),
+                if (isExpanded && allowSubcategories) ...[
+                  const Divider(height: 1),
+                  ...subs.map(
+                    (sub) => ListTile(
+                      contentPadding: const EdgeInsets.only(
+                        left: 32,
+                        right: 16,
+                      ),
+                      leading: CircleAvatar(
+                        radius: 16,
+                        backgroundColor: ColorHelper.fromHex(
+                          sub.iconColor,
+                        ).withValues(alpha: 0.15),
+                        child: Icon(
+                          IconHelper.getIcon(sub.icon),
+                          size: 18,
+                          color: ColorHelper.fromHex(sub.iconColor),
+                        ),
+                      ),
+                      title: Text(sub.subcategoryName),
+                      subtitle: Text(
+                        'Priority: ${sub.priority ?? 99}',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: colorScheme.onSurfaceVariant.withValues(
+                            alpha: 0.7,
+                          ),
+                        ),
+                      ),
+                      trailing: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          IconButton(
+                            icon: const Icon(
+                              Icons.edit_outlined,
+                              size: 18,
+                            ),
+                            onPressed: () => _showSubCategoryDialog(
+                              cat.id!,
+                              subCategory: sub,
+                            ),
+                          ),
+                          IconButton(
+                            icon: Icon(
+                              Icons.delete_outline,
+                              size: 18,
+                              color: colorScheme.error,
+                            ),
+                            onPressed: () => _confirmDeleteSubCategory(sub),
+                          ),
+                        ],
+                      ),
                     ),
                   ),
-                ),
+                  Padding(
+                    padding: const EdgeInsets.only(left: 32, bottom: 8),
+                    child: Align(
+                      alignment: Alignment.centerLeft,
+                      child: TextButton.icon(
+                        icon: const Icon(Icons.add, size: 18),
+                        label: const Text('Add SubCategory'),
+                        onPressed: () => _showSubCategoryDialog(cat.id!),
+                      ),
+                    ),
+                  ),
+                ],
               ],
-            ],
-          ),
-        );
-      },
-    ),
+            ),
+          );
+        },
+      ),
     );
   }
 }
