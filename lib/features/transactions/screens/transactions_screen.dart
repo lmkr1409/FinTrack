@@ -262,39 +262,62 @@ class _TransactionsScreenState extends ConsumerState<TransactionsScreen> {
     final merchant = txn.merchantId != null ? _merchantMap[txn.merchantId] : null;
     final isDebit = txn.transactionType == 'DEBIT';
     final isTransfer = txn.transactionType == 'TRANSFER';
-    final amountColor = isTransfer ? AppColors.info : (isDebit ? AppColors.expense : AppColors.income);
+
+    final logoColor = isTransfer
+        ? (cat == null || cat.categoryType == 'INCOME' ? AppColors.income : AppColors.expense)
+        : (isDebit ? AppColors.expense : AppColors.income);
+
+    final amountColor = logoColor;
+
+    final Widget logoWidget;
+    if (isTransfer) {
+      logoWidget = Icon(Icons.swap_horiz_rounded, color: logoColor);
+    } else if (cat != null) {
+      logoWidget = Icon(IconHelper.getIcon(cat.icon), color: ColorHelper.fromHex(cat.iconColor));
+    } else {
+      logoWidget = Icon(
+        isDebit ? Icons.arrow_upward_rounded : Icons.arrow_downward_rounded,
+        color: logoColor,
+      );
+    }
+
     return GlassCard(
       child: ListTile(
         onTap: () => _editTransaction(txn),
         leading: CircleAvatar(
-          backgroundColor: cat != null ? ColorHelper.fromHex(cat.iconColor).withValues(alpha: 0.15) : AppColors.surfaceContainer,
-          child: cat != null
-            ? Icon(IconHelper.getIcon(cat.icon), color: ColorHelper.fromHex(cat.iconColor))
-            : Icon(
-                isTransfer ? Icons.swap_horiz_rounded : (isDebit ? Icons.arrow_upward_rounded : Icons.arrow_downward_rounded),
-                color: isDebit ? AppColors.expense : AppColors.income,
-              ),
+          backgroundColor: isTransfer
+              ? logoColor.withValues(alpha: 0.15)
+              : (cat != null ? ColorHelper.fromHex(cat.iconColor).withValues(alpha: 0.15) : AppColors.surfaceContainer),
+          child: logoWidget,
         ),
         title: Text(
           txn.description ?? (merchant?.merchantName ?? cat?.categoryName ?? txn.transactionType),
           style: const TextStyle(fontWeight: FontWeight.w600, color: AppColors.textPrimary),
-          maxLines: 1, overflow: TextOverflow.ellipsis,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
         ),
         subtitle: Text(
           [txn.transactionDate, if (account != null) account.accountName, if (cat != null) cat.categoryName].join(' • '),
           style: const TextStyle(fontSize: 12, color: AppColors.textMuted),
-          maxLines: 1, overflow: TextOverflow.ellipsis,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
         ),
-        trailing: Row(mainAxisSize: MainAxisSize.min, children: [
-          Text('${isTransfer ? '' : (isDebit ? '-' : '+')}₹${txn.amount.toStringAsFixed(2)}', style: TextStyle(fontWeight: FontWeight.bold, color: amountColor)),
-          const SizedBox(width: 4),
-          IconButton(
-            icon: Icon(Icons.delete_outline, size: 18, color: AppColors.expense.withValues(alpha: 0.7)),
-            onPressed: () => _confirmDelete(txn),
-            constraints: const BoxConstraints(),
-            padding: const EdgeInsets.all(4),
-          ),
-        ]),
+        trailing: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              '${isTransfer ? '' : (isDebit ? '-' : '+')}₹${txn.amount.toStringAsFixed(2)}',
+              style: TextStyle(fontWeight: FontWeight.bold, color: amountColor),
+            ),
+            const SizedBox(width: 4),
+            IconButton(
+              icon: Icon(Icons.delete_outline, size: 18, color: AppColors.expense.withValues(alpha: 0.7)),
+              onPressed: () => _confirmDelete(txn),
+              constraints: const BoxConstraints(),
+              padding: const EdgeInsets.all(4),
+            ),
+          ],
+        ),
       ),
     );
   }
