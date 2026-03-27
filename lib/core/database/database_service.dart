@@ -148,6 +148,15 @@ class DatabaseService {
         )
       ''');
     }
+    if (oldVersion < 8) {
+      // Version 8: Add unique indexes to prevent duplicate rules
+      await db.execute('CREATE UNIQUE INDEX IF NOT EXISTS idx_merchant_rule_keyword ON merchant_rule(keyword)');
+      await db.execute('CREATE UNIQUE INDEX IF NOT EXISTS idx_transaction_rule_type_pattern ON transaction_rule(rule_type, pattern)');
+    }
+    if (oldVersion < 9) {
+      // Version 9: Add Debt Repayment category
+      await db.execute("INSERT INTO category (category_name, icon, icon_color, priority, category_type) VALUES ('Debt Repayment', 'money_off', '#E53935', 14, 'EXPENSE')");
+    }
   }
 
   /// Reads and executes the SQL schema/seed file from assets.

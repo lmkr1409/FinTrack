@@ -173,12 +173,12 @@ class _LabelDialogState extends ConsumerState<LabelDialog> {
     });
   }
 
-  Future<void> _loadSubs(int categoryId) async {
+  Future<void> _loadSubs(int categoryId, [int? subId]) async {
     final subs = await ref.read(subCategoryRepositoryProvider).getByCategoryId(categoryId);
     if (!mounted) return;
     setState(() {
       _subCategories = subs;
-      _subcategoryId = null;
+      _subcategoryId = subId;
     });
   }
 
@@ -746,7 +746,7 @@ class _LabelDialogState extends ConsumerState<LabelDialog> {
                                             if (rule.purposeId != null) _purposeId = rule.purposeId;
                                           });
                                           if (rule.categoryId != null) {
-                                            _loadSubs(rule.categoryId!);
+                                            _loadSubs(rule.categoryId!, rule.subcategoryId);
                                           }
                                         }
                                       });
@@ -800,7 +800,7 @@ class _LabelDialogState extends ConsumerState<LabelDialog> {
                                       'Sub-Category',
                                       text,
                                       (name) => ref.read(subCategoryRepositoryProvider).insert(SubCategory(categoryId: _categoryId!, subcategoryName: name, priority: 99).toMap()).then((id) => SubCategory(id: id, categoryId: _categoryId!, subcategoryName: name, priority: 99)),
-                                      (s) { setState(() => _subcategoryId = s.id); _loadSubs(_categoryId!); },
+                                      (s) { setState(() => _subcategoryId = s.id); _loadSubs(_categoryId!, s.id); },
                                     );
                                   },
                                 ),

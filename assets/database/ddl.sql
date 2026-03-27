@@ -108,7 +108,7 @@ CREATE TABLE IF NOT EXISTS merchant (
 
 CREATE TABLE IF NOT EXISTS merchant_rule (
   rule_id INTEGER PRIMARY KEY AUTOINCREMENT,
-  keyword TEXT NOT NULL,
+  keyword TEXT NOT NULL UNIQUE,
   merchant_id INTEGER,
   category_id INTEGER,
   subcategory_id INTEGER,
@@ -133,7 +133,8 @@ CREATE TABLE IF NOT EXISTS transaction_rule (
   updated_time TEXT DEFAULT CURRENT_TIMESTAMP,
   FOREIGN KEY (payment_method_id) REFERENCES payment_method(payment_method_id) ON DELETE SET NULL,
   FOREIGN KEY (account_id) REFERENCES account(account_id) ON DELETE SET NULL,
-  FOREIGN KEY (card_id) REFERENCES cards(card_id) ON DELETE SET NULL
+  FOREIGN KEY (card_id) REFERENCES cards(card_id) ON DELETE SET NULL,
+  UNIQUE(rule_type, pattern)
 );
 
 CREATE TABLE IF NOT EXISTS "transaction" (

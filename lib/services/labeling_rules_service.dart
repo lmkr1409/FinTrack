@@ -76,6 +76,12 @@ class LabelingRulesService {
     }
     
     if (matched) {
+      final bool isComplete = catId != null &&
+                              merchId != null &&
+                              paymentId != null &&
+                              accountId != null &&
+                              cardId != null;
+
       return txn.copyWith(
         transactionType: txnType,
         categoryId: catId,
@@ -86,7 +92,7 @@ class LabelingRulesService {
         purposeId: purposeId,
         accountId: accountId,
         cardId: cardId,
-        isAutoLabeled: true,
+        isAutoLabeled: isComplete,
         labeled: false,
       );
     }
@@ -283,8 +289,14 @@ class LabelingRulesService {
       
       if (matchedOne) {
         matchCount++;
+        final bool isComplete = newCatId != null &&
+                                newMerchId != null &&
+                                newPaymentId != null &&
+                                newAccountId != null &&
+                                newCardId != null;
+
         updatedTxns.add(currentTxn.copyWith(
-          isAutoLabeled: true,
+          isAutoLabeled: isComplete,
           updatedTime: DateFormat('yyyy-MM-dd HH:mm:ss').format(DateTime.now()),
         ));
       }

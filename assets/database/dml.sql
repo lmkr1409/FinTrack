@@ -23,6 +23,7 @@ INSERT INTO category (category_name, icon, icon_color, priority, category_type) 
 INSERT INTO category (category_name, icon, icon_color, priority, category_type) VALUES ('Dividends', 'show_chart', '#00C853', 98, 'INCOME');
 INSERT INTO category (category_name, icon, icon_color, priority, category_type) VALUES ('Travel', 'flight', '#4682B4', 98, 'EXPENSE');
 INSERT INTO category (category_name, icon, icon_color, priority, category_type) VALUES ('Other', 'more_horiz', '#A9A9A9', 99, 'EXPENSE');
+INSERT INTO category (category_name, icon, icon_color, priority, category_type) VALUES ('Debt Repayment', 'money_off', '#E53935', 14, 'EXPENSE');
 
 -- 2. sub_category
 -- ... existing sub_category lines ...
