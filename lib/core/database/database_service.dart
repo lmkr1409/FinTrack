@@ -43,7 +43,26 @@ class DatabaseService {
 
   /// Called when the database needs to be upgraded
   Future<void> _onUpgrade(Database db, int oldVersion, int newVersion) async {
-    // Migrations squashed into base schema (v1)
+    if (oldVersion < 2) {
+      await db.execute('''
+        CREATE TABLE IF NOT EXISTS investment_goal (
+          goal_id INTEGER PRIMARY KEY AUTOINCREMENT,
+          goal_name TEXT NOT NULL,
+          target_amount REAL NOT NULL,
+          category_id INTEGER NOT NULL,
+          subcategory_id INTEGER,
+          purpose_id INTEGER,
+          created_time TEXT DEFAULT CURRENT_TIMESTAMP,
+          updated_time TEXT DEFAULT CURRENT_TIMESTAMP,
+          FOREIGN KEY (category_id) REFERENCES category(category_id) ON DELETE RESTRICT,
+          FOREIGN KEY (subcategory_id) REFERENCES sub_category(subcategory_id) ON DELETE SET NULL,
+          FOREIGN KEY (purpose_id) REFERENCES expense_purpose(purpose_id) ON DELETE SET NULL
+        )
+      ''');
+    }
+    if (oldVersion < 3) {
+      await db.execute('ALTER TABLE "transaction" ADD COLUMN goal_id INTEGER');
+    }
   }
 
   /// Reads and executes the SQL schema/seed file from assets.

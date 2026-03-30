@@ -43,6 +43,7 @@ class TransactionRepository extends BaseRepository<Transaction> {
     int? year,
     String? orderBy,
     int? limit,
+    int? goalId,
   }) async {
     final conditions = <String>[];
     final args = <Object?>[];
@@ -110,6 +111,10 @@ class TransactionRepository extends BaseRepository<Transaction> {
     if (year != null) {
       conditions.add("CAST(substr(transaction_date, 1, 4) AS INTEGER) = ?");
       args.add(year);
+    }
+    if (goalId != null) {
+      conditions.add('goal_id = ?');
+      args.add(goalId);
     }
 
     return query(

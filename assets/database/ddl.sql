@@ -88,6 +88,20 @@ CREATE TABLE IF NOT EXISTS budget_total (
   updated_time TEXT DEFAULT CURRENT_TIMESTAMP
 );
 
+CREATE TABLE IF NOT EXISTS investment_goal (
+  goal_id INTEGER PRIMARY KEY AUTOINCREMENT,
+  goal_name TEXT NOT NULL,
+  target_amount REAL NOT NULL,
+  category_id INTEGER NOT NULL,
+  subcategory_id INTEGER,
+  purpose_id INTEGER,
+  created_time TEXT DEFAULT CURRENT_TIMESTAMP,
+  updated_time TEXT DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (category_id) REFERENCES category(category_id) ON DELETE RESTRICT,
+  FOREIGN KEY (subcategory_id) REFERENCES sub_category(subcategory_id) ON DELETE SET NULL,
+  FOREIGN KEY (purpose_id) REFERENCES expense_purpose(purpose_id) ON DELETE SET NULL
+);
+
 CREATE TABLE IF NOT EXISTS payment_method (
 	payment_method_id INTEGER PRIMARY KEY AUTOINCREMENT,
 	payment_method_name TEXT NOT NULL,
@@ -157,6 +171,7 @@ CREATE TABLE IF NOT EXISTS "transaction" (
 	updated_time TEXT DEFAULT CURRENT_TIMESTAMP,
 	labeled INTEGER NOT NULL DEFAULT 0,
 	is_auto_labeled INTEGER NOT NULL DEFAULT 0,
+	goal_id INTEGER,
 	FOREIGN KEY (account_id) REFERENCES account(account_id) ON DELETE SET NULL,
 	FOREIGN KEY (card_id) REFERENCES cards(card_id) ON DELETE SET NULL,
 	FOREIGN KEY (category_id) REFERENCES category(category_id) ON DELETE SET NULL,
@@ -165,5 +180,6 @@ CREATE TABLE IF NOT EXISTS "transaction" (
 	FOREIGN KEY (purpose_id) REFERENCES expense_purpose(purpose_id) ON DELETE SET NULL,
 	FOREIGN KEY (related_transaction_id) REFERENCES "transaction"(transaction_id) ON DELETE SET NULL,
 	FOREIGN KEY (expense_source_id) REFERENCES expense_source(expense_source_id) ON DELETE SET NULL,
-	FOREIGN KEY (subcategory_id) REFERENCES sub_category(subcategory_id) ON DELETE SET NULL
+	FOREIGN KEY (subcategory_id) REFERENCES sub_category(subcategory_id) ON DELETE SET NULL,
+	FOREIGN KEY (goal_id) REFERENCES investment_goal(goal_id) ON DELETE SET NULL
 );

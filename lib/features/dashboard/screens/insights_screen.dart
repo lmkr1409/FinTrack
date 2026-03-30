@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 
 import 'analytics_tab.dart';
-import 'budgets_tab.dart';
 import 'dashboards_tab.dart';
 import 'insights_summary_tab.dart';
+import 'planner_tab.dart';
 import 'trends_tab.dart';
 
 /// The Insights section with a 5-tab Bottom Navigation Bar.
@@ -20,7 +20,7 @@ class _InsightsScreenState extends State<InsightsScreen> {
 
   static const _tabs = <Widget>[
     DashboardsTab(),
-    BudgetsTab(),
+    PlannerTab(),
     AnalyticsTab(),
     TrendsTab(),
     InsightsSummaryTab(),
@@ -42,9 +42,9 @@ class _InsightsScreenState extends State<InsightsScreen> {
             label: 'Dashboards',
           ),
           NavigationDestination(
-            icon: Icon(Icons.account_balance_wallet_outlined),
-            selectedIcon: Icon(Icons.account_balance_wallet_rounded),
-            label: 'Budgets',
+            icon: Icon(Icons.next_plan_outlined),
+            selectedIcon: Icon(Icons.next_plan_rounded),
+            label: 'Planner',
           ),
           NavigationDestination(
             icon: Icon(Icons.analytics_outlined),

@@ -8,6 +8,7 @@ import '../../../models/card.dart' as model;
 import '../../../models/category.dart';
 import '../../../models/expense_purpose.dart';
 import '../../../models/expense_source.dart';
+import '../../../models/investment_goal.dart';
 import '../../../models/merchant.dart';
 import '../../../models/payment_method.dart';
 import '../../../models/sub_category.dart';
@@ -46,6 +47,7 @@ class _LabelDialogState extends ConsumerState<LabelDialog> {
   int? _cardId;
   String _transactionType = 'DEBIT';
   String _nature = 'TRANSACTIONS';
+  int? _goalId;
 
   // Rule generation toggles and strings
   bool _saveAsRule = true;
@@ -68,6 +70,7 @@ class _LabelDialogState extends ConsumerState<LabelDialog> {
   List<ExpensePurpose> _purposes = [];
   List<Account> _accounts = [];
   List<model.Card> _cards = [];
+  List<InvestmentGoal> _goals = [];
   bool _loading = true;
   bool _saving = false;
 
@@ -118,6 +121,8 @@ class _LabelDialogState extends ConsumerState<LabelDialog> {
         .getAllSorted();
     final accounts = await ref.read(accountRepositoryProvider).getAllSorted();
     final cards = await ref.read(cardRepositoryProvider).getAllSorted();
+    final goals = await ref.read(investmentGoalRepositoryProvider).getAll();
+
 
     List<SubCategory> subs = [];
     if (_categoryId != null) {
@@ -182,8 +187,10 @@ class _LabelDialogState extends ConsumerState<LabelDialog> {
       _purposes = purposes;
       _accounts = accounts;
       _cards = cards;
+      _goals = goals;
       _loading = false;
     });
+
   }
 
   Future<void> _loadSubs(int categoryId, [int? subId]) async {
@@ -212,8 +219,10 @@ class _LabelDialogState extends ConsumerState<LabelDialog> {
       'card_id': _cardId,
       'transaction_type': _transactionType,
       'nature': _nature,
+      'goal_id': _goalId,
       'updated_time': nowStr,
     };
+
 
     // Add amount if it's a valid number
     final amount = double.tryParse(_amountStr);
@@ -539,6 +548,51 @@ class _LabelDialogState extends ConsumerState<LabelDialog> {
                                 ),
                               ),
                               const SizedBox(height: 12),
+
+                              if (_nature == 'INVESTMENTS') ...[
+                                // Goal Selection
+                                const Padding(
+                                  padding: EdgeInsets.symmetric(horizontal: 4, vertical: 8),
+                                  child: Row(
+                                    children: [
+                                      Icon(Icons.star_rounded, color: Colors.amberAccent),
+                                      SizedBox(width: 12),
+                                      Text(
+                                        'Investment Goal',
+                                        style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                AutocompleteField<InvestmentGoal>(
+                                  label: 'Select Goal',
+                                  initialItem: _goalId == null
+                                      ? null
+                                      : _goals.where((g) => g.id == _goalId).firstOrNull,
+                                  items: _goals,
+                                  displayStringForOption: (g) => g.goalName,
+                                  onChanged: (g) {
+                                    setState(() {
+                                      _goalId = g?.id;
+                                      if (g != null) {
+                                        _categoryId = g.categoryId;
+                                        _subcategoryId = g.subcategoryId;
+                                        _purposeId = g.purposeId;
+                                      }
+                                    });
+                                    if (g?.categoryId != null) {
+                                      _loadSubs(g!.categoryId, g.subcategoryId);
+                                    }
+                                  },
+                                  onAddNew: (text) {
+                                    // Optional: navigate to settings to add goals
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      const SnackBar(content: Text('Add new goals in Settings > Planner'))
+                                    );
+                                  },
+                                ),
+                                const SizedBox(height: 16),
+                              ],
 
                               // 3. Amount Section
                               ExpansionTile(

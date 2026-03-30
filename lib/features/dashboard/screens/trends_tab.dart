@@ -20,6 +20,7 @@ class _TrendsTabState extends State<TrendsTab> {
   final _analytics = AnalyticsService();
   bool _loading = true;
   List<Map<String, dynamic>> _yearlyTrend = [];
+  List<Map<String, dynamic>> _investmentTrend = [];
   
   double _avgMonthlyBudget = 0;
   double _avgMonthlySpending = 0;
@@ -43,6 +44,7 @@ class _TrendsTabState extends State<TrendsTab> {
     setState(() => _loading = true);
     
     final yearly = await _analytics.incomeVsExpenseLast12Months();
+    final investmentTrend = await _analytics.netInvestmentsLast12Months();
     final budgetStats = await _analytics.getLast12MonthsBudgetStats();
 
     double totalIncome12m = 0;
@@ -54,6 +56,7 @@ class _TrendsTabState extends State<TrendsTab> {
     
     setState(() {
       _yearlyTrend = yearly;
+      _investmentTrend = investmentTrend;
       _avgMonthlyBudget = budgetStats['avgMonthlyBudget'] as double;
       _avgMonthlySpending = totalExpense12m / 12;
       _avgMonthlySavings = (totalIncome12m - totalExpense12m) / 12;
@@ -106,6 +109,8 @@ class _TrendsTabState extends State<TrendsTab> {
           ),
           const SizedBox(height: 24),
           _DualTrendSection(title: 'Last 12 Months (Income vs Expense)', data: _yearlyTrend),
+          const SizedBox(height: 20),
+          _InvestmentTrendSection(data: _investmentTrend),
         ],
       ),
     );
@@ -279,3 +284,120 @@ class _DualTrendSection extends StatelessWidget {
   }
 }
 
+
+class _InvestmentTrendSection extends StatelessWidget {
+  final List<Map<String, dynamic>> data;
+  const _InvestmentTrendSection({required this.data});
+
+  @override
+  Widget build(BuildContext context) {
+    final maxVal = data.fold<double>(0, (prev, e) {
+      final v = (e['net_investment'] as num).toDouble();
+      return v > prev ? v : prev;
+    });
+
+    final total12m = data.fold<double>(0, (sum, e) => sum + (e['net_investment'] as num).toDouble());
+    final avgMonthly = total12m / 12;
+
+    return GlassCard(
+      margin: EdgeInsets.zero,
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              const Text(
+                'Net Investments (12M)',
+                style: TextStyle(fontWeight: FontWeight.bold, color: AppColors.primary, fontSize: 14),
+              ),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  Text('?${total12m.toStringAsFixed(0)}',
+                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: Colors.amberAccent)),
+                  Text('avg ?${avgMonthly.toStringAsFixed(0)}/mo',
+                      style: const TextStyle(fontSize: 10, color: AppColors.textMuted)),
+                ],
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          if (maxVal == 0)
+            const Center(
+              child: Padding(
+                padding: EdgeInsets.all(24.0),
+                child: Text('No investment data for last 12 months.',
+                    style: TextStyle(color: AppColors.textMuted)),
+              ),
+            )
+          else
+            SizedBox(
+              height: 160,
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: data.map((item) {
+                  final netInv = (item['net_investment'] as num).toDouble();
+                  final period = item['period'] as String? ?? '';
+                  final fraction = maxVal > 0 ? (netInv / maxVal).clamp(0.0, 1.0) : 0.0;
+
+                  String label = period;
+                  if (period.length >= 7) {
+                    try {
+                      final dt = DateTime.parse('${period.substring(0, 7)}-01');
+                      label = DateFormat('MMM').format(dt);
+                    } catch (_) {
+                      label = period.substring(5);
+                    }
+                  }
+
+                  return Expanded(
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 2.0),
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.end,
+                        children: [
+                          if (netInv > 0)
+                            Text(
+                              netInv >= 1000
+                                  ? '${(netInv / 1000).toStringAsFixed(0)}k'
+                                  : netInv.toStringAsFixed(0),
+                              style: const TextStyle(fontSize: 7, color: AppColors.textMuted),
+                              maxLines: 1,
+                            ),
+                          const SizedBox(height: 2),
+                          Flexible(
+                            child: FractionallySizedBox(
+                              heightFactor: fraction > 0 ? fraction.clamp(0.04, 1.0) : 0,
+                              alignment: Alignment.bottomCenter,
+                              child: Container(
+                                decoration: BoxDecoration(
+                                  gradient: LinearGradient(
+                                    colors: [
+                                      Colors.amberAccent.withValues(alpha: 0.5),
+                                      Colors.amberAccent,
+                                    ],
+                                    begin: Alignment.bottomCenter,
+                                    end: Alignment.topCenter,
+                                  ),
+                                  borderRadius: const BorderRadius.vertical(top: Radius.circular(4)),
+                                ),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(label,
+                              style: const TextStyle(fontSize: 10, color: AppColors.textMuted)),
+                        ],
+                      ),
+                    ),
+                  );
+                }).toList(),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}

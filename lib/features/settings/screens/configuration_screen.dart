@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../../features/categories/screens/categories_tab.dart';
 import 'accounts_payments_tab.dart';
-import 'budget_tab.dart';
+import 'planner_settings_tab.dart';
 import 'purpose_source_tab.dart';
 import 'merchants_tab.dart';
 
@@ -19,7 +19,7 @@ class _ConfigurationScreenState extends State<ConfigurationScreen> {
 
   static const _tabs = <Widget>[
     CategoriesTab(),
-    BudgetTab(),
+    PlannerSettingsTab(),
     AccountsPaymentsTab(),
     PurposeSourceTab(),
     MerchantsTab(),
@@ -41,9 +41,9 @@ class _ConfigurationScreenState extends State<ConfigurationScreen> {
             label: 'Categories',
           ),
           NavigationDestination(
-            icon: Icon(Icons.account_balance_wallet_outlined),
-            selectedIcon: Icon(Icons.account_balance_wallet_rounded),
-            label: 'Budgets',
+            icon: Icon(Icons.next_plan_outlined),
+            selectedIcon: Icon(Icons.next_plan_rounded),
+            label: 'Planner',
           ),
           NavigationDestination(
             icon: Icon(Icons.account_balance_outlined),

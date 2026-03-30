@@ -30,12 +30,16 @@ class _DashboardsTabState extends State<DashboardsTab> {
   double _largestExpense = 0;
   double _spendingTrend = 0;
   bool _isSpendingUp = false;
+  Map<String, double> _allocation = {'income': 0, 'expenses': 0, 'investments': 0};
+  bool _usePrevMonthIncome = true; // Use previous month's salary as the income baseline
+  String _incomeSourceLabel = ''; // Shows which month's income is being used
 
   List<Map<String, dynamic>> _dailyTrend = [];
   PieChartGrouping _pieChartGrouping = PieChartGrouping.category;
   int? _selectedCategoryId;
   List<Map<String, dynamic>> _categoryList = [];
   List<Map<String, dynamic>> _pieChartData = [];
+  List<Map<String, dynamic>> _investmentPieData = [];
 
 
   DateTime _selectedMonth = DateTime(DateTime.now().year, DateTime.now().month);
@@ -71,6 +75,17 @@ class _DashboardsTabState extends State<DashboardsTab> {
     final expense = await _analytics.totalByNatureAndType('TRANSACTIONS', 'DEBIT', start, end);
     final tCount = await _analytics.transactionCount(start, end);
     final maxExp = await _analytics.largestExpense(start, end);
+    final allocation = await _analytics.getIncomeAllocation(
+      start,
+      end,
+      prevMonthStart: _usePrevMonthIncome ? prevMonthStart : null,
+      prevMonthEnd: _usePrevMonthIncome ? prevMonthEnd : null,
+    );
+    final prevMonthName = DateFormat('MMM yyyy').format(DateTime(_selectedMonth.year, _selectedMonth.month - 1));
+    final currMonthName = DateFormat('MMM yyyy').format(_selectedMonth);
+    final incomeLabel = _usePrevMonthIncome
+        ? 'Salary from $prevMonthName + other income'
+        : 'All income from $currMonthName';
 
     final prevExpense = await _analytics.totalByNatureAndType(
       'TRANSACTIONS',
@@ -91,6 +106,7 @@ class _DashboardsTabState extends State<DashboardsTab> {
 
     final dailyTrend = await _analytics.expensePerDay(start, end);
     final categoryList = await _analytics.expensesByCategory(start, end);
+    final investmentPie = await _analytics.investmentsByCategory(start, end);
     List<Map<String, dynamic>> pieChartData = [];
 
     switch (_pieChartGrouping) {
@@ -127,6 +143,9 @@ class _DashboardsTabState extends State<DashboardsTab> {
       _dailyTrend = dailyTrend;
       _categoryList = categoryList;
       _pieChartData = pieChartData;
+      _investmentPieData = investmentPie;
+      _allocation = allocation;
+      _incomeSourceLabel = incomeLabel;
 
       _loading = false;
     });
@@ -265,6 +284,12 @@ class _DashboardsTabState extends State<DashboardsTab> {
               _loadData();
             },
           ),
+          const SizedBox(height: 20),
+
+          _buildIncomeAllocation(),
+          const SizedBox(height: 16),
+
+          _buildInvestmentPieChart(),
           const SizedBox(height: 16),
         ],
       ),
@@ -291,6 +316,242 @@ class _DashboardsTabState extends State<DashboardsTab> {
       ),
     ],
   );
+  }
+
+  Widget _buildIncomeAllocation() {
+    final income = _allocation['income'] ?? 0.0;
+    final exp = _allocation['expenses'] ?? 0.0;
+    final inv = _allocation['investments'] ?? 0.0;
+    
+    final totalSpend = exp + inv;
+    final hasIncome = income > 0;
+    final hasSpend = totalSpend > 0;
+    if (!hasIncome && !hasSpend) return const SizedBox.shrink();
+
+    double savings = (income - exp - inv).clamp(0.0, double.infinity);
+    final overspent = (exp + inv) > income && income > 0;
+
+    final totalAllocated = exp + inv + savings;
+    final expPct = totalAllocated > 0 ? exp / totalAllocated : 0.0;
+    final invPct = totalAllocated > 0 ? inv / totalAllocated : 0.0;
+    final savPct = totalAllocated > 0 ? savings / totalAllocated : 0.0;
+
+    return GlassCard(
+      margin: EdgeInsets.zero,
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Header row
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'Income Allocation',
+                    style: TextStyle(fontWeight: FontWeight.bold, color: AppColors.primary, fontSize: 14),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    'Budget from: $_incomeSourceLabel',
+                    style: const TextStyle(fontSize: 11, color: AppColors.textMuted),
+                  ),
+                ],
+              ),
+              Row(
+                children: [
+                  Text(
+                    '₹${income.toStringAsFixed(0)}',
+                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: AppColors.textSecondary),
+                  ),
+                  const SizedBox(width: 4),
+                  Tooltip(
+                    message: _usePrevMonthIncome
+                        ? 'Using previous month\'s income as baseline'
+                        : 'Using current month income as baseline',
+                    child: GestureDetector(
+                      onTap: () {
+                        setState(() => _usePrevMonthIncome = !_usePrevMonthIncome);
+                        _loadData();
+                      },
+                      child: Icon(
+                        _usePrevMonthIncome ? Icons.history_toggle_off_rounded : Icons.calendar_today_rounded,
+                        size: 18,
+                        color: _usePrevMonthIncome ? AppColors.primary : AppColors.textMuted,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+          if (overspent) ...[
+            const SizedBox(height: 8),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+              decoration: BoxDecoration(
+                color: AppColors.expense.withValues(alpha: 0.1),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: AppColors.expense.withValues(alpha: 0.3)),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(Icons.warning_amber_rounded, size: 14, color: AppColors.expense),
+                  const SizedBox(width: 6),
+                  Text(
+                    'Overspent by ₹${(exp + inv - income).toStringAsFixed(0)}',
+                    style: TextStyle(fontSize: 11, color: AppColors.expense, fontWeight: FontWeight.bold),
+                  ),
+                ],
+              ),
+            ),
+          ],
+          const SizedBox(height: 12),
+          // Allocation bar
+          ClipRRect(
+            borderRadius: BorderRadius.circular(8),
+            child: SizedBox(
+              height: 12,
+              child: Row(
+                children: [
+                  if (expPct > 0) Expanded(flex: (expPct * 100).toInt().clamp(1, 100), child: Container(color: AppColors.expense)),
+                  if (invPct > 0) Expanded(flex: (invPct * 100).toInt().clamp(1, 100), child: Container(color: Colors.amberAccent)),
+                  if (savPct > 0) Expanded(flex: (savPct * 100).toInt().clamp(1, 100), child: Container(color: AppColors.income)),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 16),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              _buildAllocationLegend(AppColors.expense, 'Expenses', exp, expPct),
+              _buildAllocationLegend(Colors.amberAccent, 'Invested', inv, invPct),
+              _buildAllocationLegend(AppColors.income, 'Savings', savings, savPct),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildAllocationLegend(Color color, String label, double amount, double pct) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Container(width: 8, height: 8, decoration: BoxDecoration(color: color, shape: BoxShape.circle)),
+            const SizedBox(width: 6),
+            Text(label, style: const TextStyle(fontSize: 11, color: AppColors.textSecondary, fontWeight: FontWeight.bold)),
+          ],
+        ),
+        const SizedBox(height: 2),
+        Text('₹${amount.toStringAsFixed(0)}', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+        Text('${(pct * 100).toStringAsFixed(1)}%', style: const TextStyle(fontSize: 10, color: AppColors.textMuted)),
+      ],
+    );
+  }
+
+  Widget _buildInvestmentPieChart() {
+    if (_investmentPieData.isEmpty) return const SizedBox.shrink();
+
+    final total = _investmentPieData.fold<double>(
+      0,
+      (sum, item) => sum + (item['value'] as num).toDouble(),
+    );
+
+    return GlassCard(
+      margin: EdgeInsets.zero,
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              const Text(
+                'Investments Breakdown',
+                style: TextStyle(fontWeight: FontWeight.bold, color: AppColors.primary, fontSize: 14),
+              ),
+              Text(
+                '₹${total.toStringAsFixed(0)}',
+                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: Colors.amberAccent),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          Row(
+            children: [
+              SizedBox(
+                height: 120,
+                width: 120,
+                child: PieChart(
+                  PieChartData(
+                    sectionsSpace: 2,
+                    centerSpaceRadius: 30,
+                    sections: _investmentPieData.map((item) {
+                      final value = (item['value'] as num).toDouble();
+                      final colorHex = item['color'] as String? ?? '#FFC107';
+                      final color = ColorHelper.fromHex(colorHex);
+                      return PieChartSectionData(
+                        color: color,
+                        value: value,
+                        title: '',
+                        radius: 20,
+                      );
+                    }).toList(),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 24),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: _investmentPieData.map((item) {
+                    final name = item['name'] as String? ?? 'Unknown';
+                    final value = (item['value'] as num).toDouble();
+                    final colorHex = item['color'] as String? ?? '#FFC107';
+                    final color = ColorHelper.fromHex(colorHex);
+                    final pct = total > 0 ? (value / total * 100) : 0.0;
+                    return Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 4.0),
+                      child: Row(
+                        children: [
+                          Container(
+                            width: 10, height: 10,
+                            decoration: BoxDecoration(shape: BoxShape.circle, color: color),
+                          ),
+                          const SizedBox(width: 6),
+                          Expanded(
+                            child: Text(name,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(fontSize: 12, color: AppColors.textPrimary)),
+                          ),
+                          Column(
+                            crossAxisAlignment: CrossAxisAlignment.end,
+                            children: [
+                              Text('₹${value.toStringAsFixed(0)}',
+                                style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: AppColors.textPrimary)),
+                              Text('${pct.toStringAsFixed(1)}%',
+                                style: const TextStyle(fontSize: 10, color: AppColors.textMuted)),
+                            ],
+                          ),
+                        ],
+                      ),
+                    );
+                  }).toList(),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
   }
 }
 

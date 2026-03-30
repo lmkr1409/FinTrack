@@ -18,6 +18,7 @@ class Transaction {
   final bool labeled;
   final bool isAutoLabeled;
   final String nature;
+  final int? goalId;
 
   Transaction({
     this.id,
@@ -39,6 +40,7 @@ class Transaction {
     this.labeled = false,
     this.isAutoLabeled = false,
     this.nature = 'EXPENSE',
+    this.goalId,
   });
 
   factory Transaction.fromMap(Map<String, dynamic> map) {
@@ -62,6 +64,7 @@ class Transaction {
       labeled: map['labeled'] == 1,
       isAutoLabeled: map['is_auto_labeled'] == 1,
       nature: map['nature'] ?? 'EXPENSE',
+      goalId: map['goal_id'],
     );
   }
 
@@ -86,6 +89,7 @@ class Transaction {
       'labeled': labeled ? 1 : 0,
       'is_auto_labeled': isAutoLabeled ? 1 : 0,
       'nature': nature,
+      'goal_id': goalId,
     };
   }
 
@@ -109,6 +113,7 @@ class Transaction {
     bool? labeled,
     bool? isAutoLabeled,
     String? nature,
+    int? goalId,
   }) {
     return Transaction(
       id: id ?? this.id,
@@ -130,6 +135,7 @@ class Transaction {
       labeled: labeled ?? this.labeled,
       isAutoLabeled: isAutoLabeled ?? this.isAutoLabeled,
       nature: nature ?? this.nature,
+      goalId: goalId ?? this.goalId,
     );
   }
 }

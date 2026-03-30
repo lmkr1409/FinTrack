@@ -13,6 +13,7 @@ import '../repositories/transaction_repository.dart';
 import '../repositories/merchant_rule_repository.dart';
 import '../repositories/transaction_rule_repository.dart';
 import '../repositories/budget_total_repository.dart';
+import '../repositories/investment_goal_repository.dart';
 
 // ─── Repository Providers ────────────────────────────────────────────
 
@@ -66,4 +67,8 @@ final transactionRuleRepositoryProvider = Provider<TransactionRuleRepository>((r
 
 final budgetTotalRepositoryProvider = Provider<BudgetTotalRepository>((ref) {
   return BudgetTotalRepository();
+});
+
+final investmentGoalRepositoryProvider = Provider<InvestmentGoalRepository>((ref) {
+  return InvestmentGoalRepository();
 });

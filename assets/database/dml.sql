@@ -21,13 +21,14 @@ INSERT INTO category (category_name, icon, icon_color, priority, category_type) 
 INSERT INTO category (category_name, icon, icon_color, priority, category_type) VALUES ('Travel', 'flight', '#4682B4', 13, 'TRANSACTIONS');
 INSERT INTO category (category_name, icon, icon_color, priority, category_type) VALUES ('Debt Repayment', 'money_off', '#E53935', 14, 'TRANSACTIONS');
 INSERT INTO category (category_name, icon, icon_color, priority, category_type) VALUES ('Other', 'more_horiz', '#A9A9A9', 99, 'TRANSACTIONS');
-INSERT INTO category (category_name, icon, icon_color, priority, category_type) VALUES ('Mutual Funds', 'pie_chart', '#6366F1', 99, 'INVESTMENTS');
-INSERT INTO category (category_name, icon, icon_color, priority, category_type) VALUES ('Stocks', 'show_chart', '#34D399', 99, 'INVESTMENTS');
-INSERT INTO category (category_name, icon, icon_color, priority, category_type) VALUES ('National Pension Scheme', 'account_balance_wallet', '#8B5CF6', 99, 'INVESTMENTS');
-INSERT INTO category (category_name, icon, icon_color, priority, category_type) VALUES ('Provident Fund', 'savings', '#14B8A6', 99, 'INVESTMENTS');
-INSERT INTO category (category_name, icon, icon_color, priority, category_type) VALUES ('Fixed Deposit', 'lock', '#FBBF24', 99, 'INVESTMENTS');
-INSERT INTO category (category_name, icon, icon_color, priority, category_type) VALUES ('Recurring Deposit', 'history', '#0EA5E9', 99, 'INVESTMENTS');
-INSERT INTO category (category_name, icon, icon_color, priority, category_type) VALUES ('Chit Funds', 'account_balance', '#D946EF', 99, 'INVESTMENTS');
+INSERT INTO category (category_name, icon, icon_color, priority, category_type) VALUES ('Mutual Funds', 'pie_chart', '#6366F1', 1, 'INVESTMENTS');
+INSERT INTO category (category_name, icon, icon_color, priority, category_type) VALUES ('Stocks', 'show_chart', '#34D399', 2, 'INVESTMENTS');
+INSERT INTO category (category_name, icon, icon_color, priority, category_type) VALUES ('National Pension Scheme', 'account_balance_wallet', '#8B5CF6', 3, 'INVESTMENTS');
+INSERT INTO category (category_name, icon, icon_color, priority, category_type) VALUES ('Provident Fund', 'savings', '#14B8A6', 4, 'INVESTMENTS');
+INSERT INTO category (category_name, icon, icon_color, priority, category_type) VALUES ('Fixed Deposit', 'lock', '#FBBF24', 5, 'INVESTMENTS');
+INSERT INTO category (category_name, icon, icon_color, priority, category_type) VALUES ('Recurring Deposit', 'history', '#0EA5E9', 6, 'INVESTMENTS');
+INSERT INTO category (category_name, icon, icon_color, priority, category_type) VALUES ('Chit Funds', 'account_balance', '#D946EF', 7, 'INVESTMENTS');
+INSERT INTO category (category_name, icon, icon_color, priority, category_type) VALUES ('Savings Account', 'account_balance', '#916b47ff', 8, 'INVESTMENTS');
 INSERT INTO category (category_name, icon, icon_color, priority, category_type) VALUES ('Self Transfer', 'swap_horiz', '#607D8B', 1, 'TRANSFERS');
 
 

@@ -172,6 +172,43 @@ class AnalyticsService {
     return paddedResult;
   }
 
+  Future<List<Map<String, dynamic>>> netInvestmentsLast12Months() async {
+    final db = await _db.database;
+    final now = DateTime.now();
+    final startOfCurrentMonth = DateTime(now.year, now.month, 1);
+    final twelveMonthsAgo = DateTime(startOfCurrentMonth.year, startOfCurrentMonth.month - 11, 1);
+    final startStr = '${twelveMonthsAgo.year}-${twelveMonthsAgo.month.toString().padLeft(2, '0')}-01';
+
+    final result = await db.rawQuery('''
+      SELECT
+        substr(transaction_date, 1, 7) as period,
+        COALESCE(SUM(CASE WHEN transaction_type = 'DEBIT'  THEN amount ELSE 0 END), 0)
+        - COALESCE(SUM(CASE WHEN transaction_type = 'CREDIT' THEN amount ELSE 0 END), 0) as net_investment
+      FROM "transaction"
+      WHERE nature = 'INVESTMENTS'
+        AND transaction_date >= ?
+      GROUP BY period
+      ORDER BY period ASC
+    ''', [startStr]);
+
+    final resultMap = {for (var row in result) row['period'] as String: row};
+
+    final paddedResult = <Map<String, dynamic>>[];
+    for (int i = 0; i < 12; i++) {
+      int nextMonth = twelveMonthsAgo.month + i;
+      int yearOffset = (nextMonth - 1) ~/ 12;
+      int m = (nextMonth - 1) % 12 + 1;
+      int y = twelveMonthsAgo.year + yearOffset;
+      final period = '$y-${m.toString().padLeft(2, '0')}';
+      if (resultMap.containsKey(period)) {
+        paddedResult.add(Map<String, dynamic>.from(resultMap[period]!));
+      } else {
+        paddedResult.add({'period': period, 'net_investment': 0.0});
+      }
+    }
+    return paddedResult;
+  }
+
   // ─── Budget vs Actual ───────────────────────────────────
 
   Future<Map<String, dynamic>> getLast12MonthsBudgetStats() async {
@@ -400,5 +437,134 @@ class AnalyticsService {
       HAVING value > 0
       ORDER BY value DESC
     ''', [start, end]);
+  }
+
+  Future<List<Map<String, dynamic>>> investmentsByCategory(String start, String end) async {
+    final db = await _db.database;
+    return db.rawQuery('''
+      SELECT 
+        c.category_id as id,
+        COALESCE(c.category_name, 'Uncategorized') as name,
+        COALESCE(c.icon_color, '#FFC107') as color,
+        (
+          COALESCE(SUM(CASE WHEN t.transaction_type = 'DEBIT' THEN t.amount ELSE 0 END), 0)
+          - COALESCE(SUM(CASE WHEN t.transaction_type = 'CREDIT' THEN t.amount ELSE 0 END), 0)
+        ) as value
+      FROM "transaction" t
+      LEFT JOIN category c ON t.category_id = c.category_id
+      WHERE t.nature = 'INVESTMENTS'
+        AND t.transaction_date >= ?
+        AND t.transaction_date <= ?
+      GROUP BY c.category_id
+      HAVING value > 0
+      ORDER BY value DESC
+    ''', [start, end]);
+  }
+
+  // ─── Investment Goals ─────────────────────────────────────
+
+  Future<List<Map<String, dynamic>>> getGoalProgress(int month, int year) async {
+    final db = await _db.database;
+    final endMonth = month == 12 ? 1 : month + 1;
+    final endYear = month == 12 ? year + 1 : year;
+    final endStr = '$endYear-${endMonth.toString().padLeft(2, '0')}-01';
+
+    return db.rawQuery('''
+      SELECT 
+        g.goal_id,
+        g.goal_name,
+        g.target_amount,
+        g.category_id,
+        g.subcategory_id,
+        g.purpose_id,
+        c.category_name,
+        c.icon,
+        c.icon_color,
+        COALESCE((
+          SELECT 
+            COALESCE(SUM(CASE WHEN t.transaction_type = 'DEBIT' THEN t.amount ELSE 0 END), 0)
+            - COALESCE(SUM(CASE WHEN t.transaction_type = 'CREDIT' THEN t.amount ELSE 0 END), 0)
+          FROM "transaction" t 
+          WHERE t.nature = 'INVESTMENTS'
+            AND t.goal_id = g.goal_id
+            AND t.transaction_date < ?
+        ), 0) as saved_amount
+      FROM investment_goal g
+      JOIN category c ON g.category_id = c.category_id
+      ORDER BY g.created_time DESC
+    ''', [endStr]);
+  }
+
+  Future<Map<String, double>> getIncomeAllocation(
+    String start,
+    String end, {
+    String? prevMonthStart,
+    String? prevMonthEnd,
+  }) async {
+    final db = await _db.database;
+    double income;
+
+    if (prevMonthStart != null && prevMonthEnd != null) {
+      // Hybrid mode:
+      //   Part A — Salary subcategory from PREVIOUS month
+      //   Part B — All other income (non-salary or uncategorized) from CURRENT month
+      final salaryPrevQuery = await db.rawQuery('''
+        SELECT COALESCE(SUM(t.amount), 0) as total
+        FROM "transaction" t
+        LEFT JOIN sub_category sc ON t.subcategory_id = sc.subcategory_id
+        WHERE t.nature = 'TRANSACTIONS'
+          AND t.transaction_type = 'CREDIT'
+          AND LOWER(COALESCE(sc.subcategory_name, '')) = 'salary'
+          AND t.transaction_date >= ?
+          AND t.transaction_date <= ?
+      ''', [prevMonthStart, prevMonthEnd]);
+      final salaryFromPrev = (salaryPrevQuery.first['total'] as num).toDouble();
+
+      final otherCurrentQuery = await db.rawQuery('''
+        SELECT COALESCE(SUM(t.amount), 0) as total
+        FROM "transaction" t
+        LEFT JOIN sub_category sc ON t.subcategory_id = sc.subcategory_id
+        WHERE t.nature = 'TRANSACTIONS'
+          AND t.transaction_type = 'CREDIT'
+          AND (LOWER(COALESCE(sc.subcategory_name, '')) != 'salary' OR t.subcategory_id IS NULL)
+          AND t.transaction_date >= ?
+          AND t.transaction_date <= ?
+      ''', [start, end]);
+      final otherFromCurrent = (otherCurrentQuery.first['total'] as num).toDouble();
+
+      income = salaryFromPrev + otherFromCurrent;
+    } else {
+      // Simple mode: all income from current month
+      final incomeQuery = await db.rawQuery(
+        'SELECT COALESCE(SUM(amount), 0) as total FROM "transaction" WHERE nature=\'TRANSACTIONS\' AND transaction_type=\'CREDIT\' AND transaction_date >= ? AND transaction_date <= ?',
+        [start, end],
+      );
+      income = (incomeQuery.first['total'] as num).toDouble();
+    }
+
+    // Expenses — always current month
+    final expenseQuery = await db.rawQuery(
+      'SELECT COALESCE(SUM(amount), 0) as total FROM "transaction" WHERE nature=\'TRANSACTIONS\' AND transaction_type=\'DEBIT\' AND transaction_date >= ? AND transaction_date <= ?',
+      [start, end],
+    );
+    final expenses = (expenseQuery.first['total'] as num).toDouble();
+
+    // Net investments — DEBIT minus CREDIT (withdrawals reduce net investment)
+    final invDebitQuery = await db.rawQuery(
+      'SELECT COALESCE(SUM(amount), 0) as total FROM "transaction" WHERE nature=\'INVESTMENTS\' AND transaction_type=\'DEBIT\' AND transaction_date >= ? AND transaction_date <= ?',
+      [start, end],
+    );
+    final invCreditQuery = await db.rawQuery(
+      'SELECT COALESCE(SUM(amount), 0) as total FROM "transaction" WHERE nature=\'INVESTMENTS\' AND transaction_type=\'CREDIT\' AND transaction_date >= ? AND transaction_date <= ?',
+      [start, end],
+    );
+    final investments = ((invDebitQuery.first['total'] as num).toDouble() -
+        (invCreditQuery.first['total'] as num).toDouble()).clamp(0.0, double.infinity);
+
+    return {
+      'income': income,
+      'expenses': expenses,
+      'investments': investments,
+    };
   }
 }
