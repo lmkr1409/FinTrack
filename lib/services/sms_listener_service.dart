@@ -3,6 +3,7 @@ import 'package:telephony/telephony.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'sms_parsing_service.dart';
+import 'providers.dart';
 
 class SmsListenerService {
   static final Telephony telephony = Telephony.instance;
@@ -66,9 +67,29 @@ class SmsListenerService {
         
         onProgress?.call(i + 1, total);
       }
-
     } else {
       onProgress?.call(0, 0);
     }
+  }
+
+  /// Re-syncs SMS messages from a specific date, overriding existing transactions.
+  static Future<void> hardReloadSync(
+    ProviderContainer container,
+    DateTime fromDate, {
+    void Function(int, int)? onProgress,
+  }) async {
+    // 1. Delete transactions from DB starting from the selected date
+    final txnRepo = container.read(transactionRepositoryProvider);
+    final dateStr = fromDate.toIso8601String().split('T')[0];
+    await txnRepo.deleteFromDate(dateStr);
+
+    // 2. Reset the last read timestamp in preferences to the start of the selected date
+    final prefs = await SharedPreferences.getInstance();
+    // Use the start of the day in milliseconds
+    final startOfDay = DateTime(fromDate.year, fromDate.month, fromDate.day);
+    await prefs.setInt(_lastSmsReadKey, startOfDay.millisecondsSinceEpoch - 1);
+
+    // 3. Trigger a fresh sync
+    await syncInboxMessages(container, onProgress: onProgress);
   }
 }

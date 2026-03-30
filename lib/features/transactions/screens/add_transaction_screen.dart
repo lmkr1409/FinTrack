@@ -31,6 +31,7 @@ class _AddTransactionScreenState extends ConsumerState<AddTransactionScreen> {
   final _dateCtrl = TextEditingController();
 
   String _transactionType = 'DEBIT';
+  String _nature = 'TRANSACTIONS';
   int? _categoryId;
   int? _subcategoryId;
   int? _accountId;
@@ -63,10 +64,7 @@ class _AddTransactionScreenState extends ConsumerState<AddTransactionScreen> {
   }
 
   String get _currentCategoryType {
-    if (_transactionType == 'DEBIT') return 'EXPENSE';
-    if (_transactionType == 'CREDIT') return 'INCOME';
-    if (_transactionType == 'TRANSFER' && _transferType == 'CREDIT') return 'INCOME';
-    return 'EXPENSE'; // Default for other transfers
+    return _nature;
   }
 
   Future<void> _loadLookups() async {
@@ -118,7 +116,7 @@ class _AddTransactionScreenState extends ConsumerState<AddTransactionScreen> {
 
     final repo = ref.read(transactionRepositoryProvider);
 
-    if (_transactionType == 'TRANSFER' && _transferType == 'SELF') {
+    if (_nature == 'TRANSFERS' && _transferType == 'SELF') {
       if (_toAccountId == null) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Please select a destination Account')),
@@ -131,7 +129,8 @@ class _AddTransactionScreenState extends ConsumerState<AddTransactionScreen> {
       final toAccName = _accounts.where((a) => a.id == _toAccountId).firstOrNull?.accountName ?? 'Destination';
 
       final fromTxn = Transaction(
-        transactionType: 'TRANSFER',
+        transactionType: 'DEBIT',
+        nature: 'TRANSFERS',
         amount: amount,
         transactionDate: _dateCtrl.text,
         description: 'Self Transfer from $fromAccName to $toAccName',
@@ -147,7 +146,8 @@ class _AddTransactionScreenState extends ConsumerState<AddTransactionScreen> {
 
       // 2. Create the "To" side transaction (Linked)
       final toTxn = Transaction(
-        transactionType: 'TRANSFER',
+        transactionType: 'CREDIT',
+        nature: 'TRANSFERS',
         amount: amount,
         transactionDate: _dateCtrl.text,
         description: 'Self Transfer from $fromAccName to $toAccName',
@@ -166,6 +166,7 @@ class _AddTransactionScreenState extends ConsumerState<AddTransactionScreen> {
       // Standard transaction
       final txn = Transaction(
         transactionType: _transactionType,
+        nature: _nature,
         amount: amount,
         transactionDate: _dateCtrl.text,
         description: _descCtrl.text.trim().isNotEmpty ? _descCtrl.text.trim() : null,
@@ -257,16 +258,19 @@ class _AddTransactionScreenState extends ConsumerState<AddTransactionScreen> {
             // Transaction Type
             SegmentedButton<String>(
               segments: const [
-                ButtonSegment(value: 'DEBIT', label: Text('Debit'), icon: Icon(Icons.arrow_upward_rounded, size: 18)),
-                ButtonSegment(value: 'CREDIT', label: Text('Credit'), icon: Icon(Icons.arrow_downward_rounded, size: 18)),
-                ButtonSegment(value: 'TRANSFER', label: Text('Transfer'), icon: Icon(Icons.swap_horiz_rounded, size: 18)),
+                ButtonSegment(value: 'TRANSACTIONS', label: Text('Transaction'), icon: Icon(Icons.sync_alt_rounded, size: 18)),
+                ButtonSegment(value: 'TRANSFERS', label: Text('Transfer'), icon: Icon(Icons.swap_horiz_rounded, size: 18)),
+                ButtonSegment(value: 'INVESTMENTS', label: Text('Invest'), icon: Icon(Icons.pie_chart_outline, size: 18)),
               ],
-              selected: {_transactionType},
+              selected: {_nature},
               onSelectionChanged: (s) {
-                final newType = s.first;
-                if (newType != _transactionType) {
+                final newNature = s.first;
+                if (newNature != _nature) {
                   setState(() {
-                    _transactionType = newType;
+                    _nature = newNature;
+                    if (_nature == 'TRANSFERS') {
+                      _transactionType = 'DEBIT';
+                    }
                     _categoryId = null;
                     _subcategoryId = null;
                     _subCategories = [];
@@ -274,7 +278,7 @@ class _AddTransactionScreenState extends ConsumerState<AddTransactionScreen> {
                 }
               },
             ),
-            if (_transactionType == 'TRANSFER') ...[
+            if (_nature == 'TRANSFERS') ...[
               const SizedBox(height: 16),
               const Text('Transfer Type', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: AppColors.primary)),
               const SizedBox(height: 8),

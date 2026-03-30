@@ -5,17 +5,19 @@ import 'package:intl/intl.dart';
 import '../models/transaction.dart';
 import '../models/merchant_rule.dart';
 import '../models/transaction_rule.dart';
+import '../models/category.dart';
 import '../services/providers.dart';
 
 class LabelingRulesService {
   /// Applies rules from the database to auto-label a transaction based on its description.
   /// Returns a modified copy of the transaction with mapped fields and `isAutoLabeled` set to true.
-  static Transaction applyRules(Transaction txn, List<TransactionRule> tRules, List<MerchantRule> mRules) {
+  static Transaction applyRules(Transaction txn, List<TransactionRule> tRules, List<MerchantRule> mRules, {List<Category>? allCategories}) {
     if (txn.description == null || txn.description!.isEmpty) return txn;
     
     final lower = txn.description!.toLowerCase();
     
     String txnType = txn.transactionType;
+    String nature = txn.nature;
     int? catId = txn.categoryId;
     int? subCatId = txn.subcategoryId;
     int? merchId = txn.merchantId;
@@ -32,6 +34,14 @@ class LabelingRulesService {
       if (lower.contains(rule.pattern.toLowerCase())) {
         txnType = rule.mappedType!;
         matched = true;
+        
+        // Synchronize nature with type initially
+        if (txnType == 'CREDIT' || txnType == 'DEBIT') {
+          nature = 'TRANSACTIONS';
+        } else if (txnType == 'TRANSFER') {
+          txnType = 'DEBIT';
+          nature = 'TRANSFERS';
+        }
         break;
       }
     }
@@ -75,6 +85,14 @@ class LabelingRulesService {
       }
     }
     
+    // Override nature if category provides one
+    if (catId != null && allCategories != null) {
+       try {
+         final category = allCategories.firstWhere((c) => c.id == catId);
+         nature = category.categoryType;
+       } catch (_) {}
+    }
+    
     if (matched) {
       final bool isComplete = catId != null &&
                               merchId != null &&
@@ -84,6 +102,7 @@ class LabelingRulesService {
 
       return txn.copyWith(
         transactionType: txnType,
+        nature: nature,
         categoryId: catId,
         subcategoryId: subCatId,
         merchantId: merchId,
@@ -161,6 +180,13 @@ class LabelingRulesService {
     final tRepo = ref.read(transactionRuleRepositoryProvider);
     final tRules = await tRepo.getAllSorted();
 
+    final cardRepo = ref.read(cardRepositoryProvider);
+    final allCards = await cardRepo.getAll();
+    
+    final catRepo = ref.read(categoryRepositoryProvider);
+    final allCategories = await catRepo.getAll();
+    final Map<int, String> categoryTypes = { for (var c in allCategories) c.id!: c.categoryType };
+
     if ((!applyMerchants || mRules.isEmpty) && (!applyTransactions || tRules.isEmpty)) return 0;
 
     final txnRepo = ref.read(transactionRepositoryProvider);
@@ -190,6 +216,7 @@ class LabelingRulesService {
       Transaction currentTxn = txn;
 
       String? newTxnType = txn.transactionType;
+      String? newNature = txn.nature;
       int? newCatId = txn.categoryId;
       int? newSubCatId = txn.subcategoryId;
       int? newMerchId = txn.merchantId;
@@ -215,7 +242,15 @@ class LabelingRulesService {
         final typeRules = tRules.where((r) => r.ruleType == 'TRANSACTION_TYPE');
         for (var rule in typeRules) {
           if (lower.contains(rule.pattern.toLowerCase())) {
-            if (override || newTxnType == null) newTxnType = rule.mappedType;
+            if (override || newTxnType == null) {
+              newTxnType = rule.mappedType;
+              if (newTxnType == 'CREDIT' || newTxnType == 'DEBIT') {
+                newNature = 'TRANSACTIONS';
+              } else if (newTxnType == 'TRANSFER') {
+                newTxnType = 'DEBIT';
+                newNature = 'TRANSFERS';
+              }
+            }
             matchedOne = true;
             break;
           }
@@ -247,6 +282,21 @@ class LabelingRulesService {
             break;
           }
         }
+
+        // Try generic card lookup if still null
+        if (newCardId == null) {
+          final accMatch = RegExp(r'(?:a[/\\]?c|acct|account|card)\s*(?:[Nn]o)?.*?(?:\b|[Xx]|\*)*([0-9]{4})\b', caseSensitive: false).firstMatch(txn.description!);
+          if (accMatch != null) {
+            final lastFour = accMatch.group(1)!;
+            for (var c in allCards) {
+              if (c.cardNumber.contains(lastFour)) {
+                newCardId = c.id;
+                matchedOne = true;
+                break;
+              }
+            }
+          }
+        }
       }
 
       if (applyMerchants) {
@@ -263,6 +313,10 @@ class LabelingRulesService {
         }
       }
 
+      if (newCatId != null && categoryTypes.containsKey(newCatId)) {
+         newNature = categoryTypes[newCatId]!;
+      }
+
       bool changed = (newTxnType != currentTxn.transactionType) ||
                      (newCatId != currentTxn.categoryId) ||
                      (newSubCatId != currentTxn.subcategoryId) ||
@@ -276,6 +330,7 @@ class LabelingRulesService {
       if (changed) {
          currentTxn = currentTxn.copyWith(
            transactionType: newTxnType,
+           nature: newNature,
            categoryId: newCatId,
            subcategoryId: newSubCatId,
            merchantId: newMerchId,

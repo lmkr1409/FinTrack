@@ -40,9 +40,13 @@ abstract class BaseRepository<T> {
   }
 
   /// Inserts a new row and returns the generated ID.
-  Future<int> insert(Map<String, dynamic> data) async {
+  Future<int> insert(Map<String, dynamic> data, {ConflictAlgorithm? conflictAlgorithm}) async {
     final database = await db;
-    return await database.insert(tableName, data);
+    return await database.insert(
+      tableName,
+      data,
+      conflictAlgorithm: conflictAlgorithm,
+    );
   }
 
   /// Updates a row by its primary key. Returns the number of rows affected.

@@ -67,12 +67,13 @@ class _DashboardsTabState extends State<DashboardsTab> {
       'yyyy-MM-dd',
     ).format(DateTime(_selectedMonth.year, _selectedMonth.month, 0));
 
-    final income = await _analytics.totalByType('CREDIT', start, end);
-    final expense = await _analytics.totalByType('DEBIT', start, end);
+    final income = await _analytics.totalByNatureAndType('TRANSACTIONS', 'CREDIT', start, end);
+    final expense = await _analytics.totalByNatureAndType('TRANSACTIONS', 'DEBIT', start, end);
     final tCount = await _analytics.transactionCount(start, end);
     final maxExp = await _analytics.largestExpense(start, end);
 
-    final prevExpense = await _analytics.totalByType(
+    final prevExpense = await _analytics.totalByNatureAndType(
+      'TRANSACTIONS',
       'DEBIT',
       prevMonthStart,
       prevMonthEnd,
@@ -174,9 +175,9 @@ class _DashboardsTabState extends State<DashboardsTab> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text(
+                Text(
                   'Net Balance',
-                  style: TextStyle(color: Colors.white70, fontSize: 14),
+                  style: const TextStyle(color: Colors.white70, fontSize: 14),
                 ),
                 const SizedBox(height: 4),
                 Text(

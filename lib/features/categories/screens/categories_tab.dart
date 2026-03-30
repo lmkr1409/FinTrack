@@ -19,10 +19,10 @@ class CategoriesTab extends ConsumerStatefulWidget {
   ConsumerState<CategoriesTab> createState() => _CategoriesTabState();
 }
 
-enum _CategorySegment { expenses, income, transfers }
+enum _CategorySegment { transactions, transfers, investments }
 
 class _CategoriesTabState extends ConsumerState<CategoriesTab> {
-  _CategorySegment _segment = _CategorySegment.expenses;
+  _CategorySegment _segment = _CategorySegment.transactions;
 
   List<Category> _categories = [];
   Map<int, List<SubCategory>> _subCategoriesMap = {};
@@ -74,7 +74,8 @@ class _CategoriesTabState extends ConsumerState<CategoriesTab> {
       text: category?.priority?.toString() ?? '99',
     );
     final isEdit = category != null;
-    String selectedType = category?.categoryType ?? defaultType ?? 'EXPENSE';
+    String selectedType =
+        category?.categoryType ?? defaultType ?? 'TRANSACTIONS';
 
     final result = await showDialog<bool>(
       context: context,
@@ -139,11 +140,41 @@ class _CategoriesTabState extends ConsumerState<CategoriesTab> {
                   decoration: const InputDecoration(
                     labelText: 'Type',
                     border: OutlineInputBorder(),
+                    isDense: true,
+                    contentPadding: EdgeInsets.fromLTRB(6, 12, 6, 12),
                   ),
+                  iconSize: 20,
+                  isExpanded: true,
+                  style: const TextStyle(fontSize: 12, color: Colors.white),
+                  selectedItemBuilder: (context) => [
+                    'TRANSACTIONS',
+                    'TRANSFERS',
+                    'INVESTMENTS',
+                  ].map((e) {
+                    final label = e == 'TRANSACTIONS'
+                        ? 'Transaction'
+                        : e == 'TRANSFERS'
+                            ? 'Transfer'
+                            : 'Investment';
+                    return FittedBox(
+                      fit: BoxFit.scaleDown,
+                      alignment: Alignment.centerLeft,
+                      child: Text(label),
+                    );
+                  }).toList(),
                   items: const [
-                    DropdownMenuItem(value: 'EXPENSE', child: Text('Expense')),
-                    DropdownMenuItem(value: 'INCOME', child: Text('Income')),
-                    DropdownMenuItem(value: 'TRANSFER', child: Text('Transfer')),
+                    DropdownMenuItem(
+                      value: 'TRANSACTIONS',
+                      child: Text('Transaction'),
+                    ),
+                    DropdownMenuItem(
+                      value: 'TRANSFERS',
+                      child: Text('Transfer'),
+                    ),
+                    DropdownMenuItem(
+                      value: 'INVESTMENTS',
+                      child: Text('Investment'),
+                    ),
                   ],
                   onChanged: (val) {
                     if (val != null) {
@@ -385,20 +416,26 @@ class _CategoriesTabState extends ConsumerState<CategoriesTab> {
       return const Center(child: CircularProgressIndicator());
     }
 
-    final expenses = _categories.where((c) => c.categoryType == 'EXPENSE').toList();
-    final incomes = _categories.where((c) => c.categoryType == 'INCOME').toList();
-    final transfers = _categories.where((c) => c.categoryType == 'TRANSFER').toList();
+    final transactions = _categories
+        .where((c) => c.categoryType == 'TRANSACTIONS')
+        .toList();
+    final transfers = _categories
+        .where((c) => c.categoryType == 'TRANSFERS')
+        .toList();
+    final investments = _categories
+        .where((c) => c.categoryType == 'INVESTMENTS')
+        .toList();
 
     Widget content;
     switch (_segment) {
-      case _CategorySegment.expenses:
-        content = _buildCategoryList(expenses, true);
-        break;
-      case _CategorySegment.income:
-        content = _buildCategoryList(incomes, true);
+      case _CategorySegment.transactions:
+        content = _buildCategoryList(transactions, true);
         break;
       case _CategorySegment.transfers:
         content = _buildCategoryList(transfers, true);
+        break;
+      case _CategorySegment.investments:
+        content = _buildCategoryList(investments, true);
         break;
     }
 
@@ -408,14 +445,32 @@ class _CategoriesTabState extends ConsumerState<CategoriesTab> {
           // Segmented control
           Padding(
             padding: const EdgeInsets.fromLTRB(12, 12, 12, 4),
-            child: SegmentedButton<_CategorySegment>(
-              segments: const [
-                ButtonSegment(value: _CategorySegment.expenses, label: Text('Expenses'), icon: Icon(Icons.outbond_rounded, size: 18)),
-                ButtonSegment(value: _CategorySegment.income, label: Text('Income'), icon: Icon(Icons.call_received_rounded, size: 18)),
-                ButtonSegment(value: _CategorySegment.transfers, label: Text('Transfer'), icon: Icon(Icons.swap_horiz_rounded, size: 18)),
+            child: Row(
+              children: [
+                Expanded(
+                  child: SegmentedButton<_CategorySegment>(
+                    segments: const [
+                      ButtonSegment(
+                        value: _CategorySegment.transactions,
+                        label: Text('Transaction'),
+                        icon: Icon(Icons.sync_alt_rounded, size: 18),
+                      ),
+                      ButtonSegment(
+                        value: _CategorySegment.transfers,
+                        label: Text('Transfer'),
+                        icon: Icon(Icons.swap_horiz_rounded, size: 18),
+                      ),
+                      ButtonSegment(
+                        value: _CategorySegment.investments,
+                        label: Text('Investment'),
+                        icon: Icon(Icons.pie_chart_outline, size: 18),
+                      ),
+                    ],
+                    selected: {_segment},
+                    onSelectionChanged: (s) => setState(() => _segment = s.first),
+                  ),
+                ),
               ],
-              selected: {_segment},
-              onSelectionChanged: (s) => setState(() => _segment = s.first),
             ),
           ),
           // List content
@@ -462,10 +517,7 @@ class _CategoriesTabState extends ConsumerState<CategoriesTab> {
           final isExpanded = _expandedIds.contains(cat.id);
 
           return Card(
-            margin: const EdgeInsets.symmetric(
-              horizontal: 12,
-              vertical: 4,
-            ),
+            margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
             child: Column(
               children: [
                 ListTile(
@@ -482,7 +534,9 @@ class _CategoriesTabState extends ConsumerState<CategoriesTab> {
                     cat.categoryName,
                     style: const TextStyle(fontWeight: FontWeight.w600),
                   ),
-                  subtitle: allowSubcategories ? Text('subcategories: ${subs.length}') : null,
+                  subtitle: allowSubcategories
+                      ? Text('subcategories: ${subs.length}')
+                      : null,
                   trailing: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
@@ -549,10 +603,7 @@ class _CategoriesTabState extends ConsumerState<CategoriesTab> {
                         mainAxisSize: MainAxisSize.min,
                         children: [
                           IconButton(
-                            icon: const Icon(
-                              Icons.edit_outlined,
-                              size: 18,
-                            ),
+                            icon: const Icon(Icons.edit_outlined, size: 18),
                             onPressed: () => _showSubCategoryDialog(
                               cat.id!,
                               subCategory: sub,

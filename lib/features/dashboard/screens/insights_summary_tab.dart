@@ -30,10 +30,11 @@ class _InsightsSummaryTabState extends State<InsightsSummaryTab> {
     final start = DateFormat('yyyy-MM-dd').format(DateTime(_selectedMonth.year, _selectedMonth.month, 1));
     final end = DateFormat('yyyy-MM-dd').format(DateTime(_selectedMonth.year, _selectedMonth.month + 1, 0));
 
-    final totalExpense = await _analytics.totalByType('DEBIT', start, end);
-    final totalIncome = await _analytics.totalByType('CREDIT', start, end);
+    final totalExpense = await _analytics.totalByNatureAndType('TRANSACTIONS', 'DEBIT', start, end);
+    final totalIncome = await _analytics.totalByNatureAndType('TRANSACTIONS', 'CREDIT', start, end);
     final topCats = await _analytics.topCategories(start, end, limit: 3);
-    final budgets = await _analytics.budgetVsActual(_selectedMonth.month, _selectedMonth.year);
+    final rawBudgets = await _analytics.budgetVsActual(_selectedMonth.month, _selectedMonth.year, categoryType: 'TRANSACTIONS');
+    final budgets = rawBudgets.where((b) => b['category_name']?.toString().toLowerCase() != 'income').toList();
 
     if (totalIncome > 0) {
       final ratio = totalExpense / totalIncome;
@@ -97,10 +98,17 @@ class _InsightsSummaryTabState extends State<InsightsSummaryTab> {
 
     return RefreshIndicator(
       onRefresh: _generateInsights,
-      child: ListView.builder(
-        padding: const EdgeInsets.all(16),
-        itemCount: _insights.length,
-        itemBuilder: (context, i) {
+      child: Column(
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+            child: const Text('Smart Insights', style: TextStyle(color: AppColors.textSecondary, fontSize: 13, fontWeight: FontWeight.bold)),
+          ),
+          Expanded(
+            child: ListView.builder(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              itemCount: _insights.length,
+              itemBuilder: (context, i) {
           final ins = _insights[i];
           return Padding(
             padding: const EdgeInsets.only(bottom: 8),
@@ -121,7 +129,10 @@ class _InsightsSummaryTabState extends State<InsightsSummaryTab> {
               ]),
             ),
           );
-        },
+              },
+            ),
+          ),
+        ],
       ),
     );
   }

@@ -19,8 +19,8 @@ class _ConfigurationScreenState extends State<ConfigurationScreen> {
 
   static const _tabs = <Widget>[
     CategoriesTab(),
-    AccountsPaymentsTab(),
     BudgetTab(),
+    AccountsPaymentsTab(),
     PurposeSourceTab(),
     MerchantsTab(),
   ];
@@ -41,14 +41,14 @@ class _ConfigurationScreenState extends State<ConfigurationScreen> {
             label: 'Categories',
           ),
           NavigationDestination(
-            icon: Icon(Icons.account_balance_outlined),
-            selectedIcon: Icon(Icons.account_balance_rounded),
-            label: 'Accounts',
-          ),
-          NavigationDestination(
             icon: Icon(Icons.account_balance_wallet_outlined),
             selectedIcon: Icon(Icons.account_balance_wallet_rounded),
             label: 'Budgets',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.account_balance_outlined),
+            selectedIcon: Icon(Icons.account_balance_rounded),
+            label: 'Accounts',
           ),
           NavigationDestination(
             icon: Icon(Icons.bookmarks_outlined),

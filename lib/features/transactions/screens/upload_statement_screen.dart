@@ -212,8 +212,16 @@ class _UploadStatementScreenState extends ConsumerState<UploadStatementScreen> {
           }
         }
 
+        // Determine nature
+        String nature = 'TRANSACTIONS';
+        if (type == 'TRANSFER') {
+          nature = 'TRANSFERS';
+          type = 'DEBIT';
+        }
+
         final txn = Transaction(
           transactionType: type,
+          nature: nature,
           amount: p.amount,
           transactionDate: p.date,
           description: p.description,

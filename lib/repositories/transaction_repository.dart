@@ -38,6 +38,7 @@ class TransactionRepository extends BaseRepository<Transaction> {
     int? expenseSourceId,
     bool? labeled,
     bool? isAutoLabeled,
+    String? nature,
     int? month,
     int? year,
     String? orderBy,
@@ -57,6 +58,10 @@ class TransactionRepository extends BaseRepository<Transaction> {
     if (transactionType != null) {
       conditions.add('transaction_type = ?');
       args.add(transactionType);
+    }
+    if (nature != null) {
+      conditions.add('nature = ?');
+      args.add(nature);
     }
     if (categoryId != null) {
       conditions.add('category_id = ?');
@@ -126,11 +131,9 @@ class TransactionRepository extends BaseRepository<Transaction> {
   /// Get total amount by transaction type within a date range.
   Future<double> getTotalByType(
       String type, String startDate, String endDate) async {
-    final result = await rawQuery(
-      'SELECT COALESCE(SUM(amount), 0) as total FROM "transaction" '
-      'WHERE transaction_type = ? AND transaction_date >= ? AND transaction_date <= ?',
-      [type, startDate, endDate],
-    );
+    const String query = 'SELECT COALESCE(SUM(amount), 0) as total FROM "transaction" '
+        'WHERE nature = ? AND transaction_date >= ? AND transaction_date <= ?';
+    final result = await rawQuery(query, [type, startDate, endDate]);
     return (result.first['total'] as num?)?.toDouble() ?? 0.0;
   }
 
@@ -236,6 +239,16 @@ class TransactionRepository extends BaseRepository<Transaction> {
     );
   }
 
+  /// Delete transactions from a given date onwards.
+  Future<int> deleteFromDate(String startDate) async {
+    final database = await db;
+    return database.delete(
+      '"transaction"',
+      where: 'transaction_date >= ?',
+      whereArgs: [startDate],
+    );
+  }
+
   /// Returns a map of category_id → total spent amount (DEBIT transactions).
   /// For monthly period, filters by month + year. For annual, filters by year only.
   Future<Map<int, double>> spentByCategoryForPeriod({
@@ -243,7 +256,7 @@ class TransactionRepository extends BaseRepository<Transaction> {
     required int year,
   }) async {
     final conditions = <String>[
-      "transaction_type = 'DEBIT'",
+      "nature = 'EXPENSE'",
       "CAST(substr(transaction_date, 1, 4) AS INTEGER) = ?",
     ];
     final args = <Object>[year];

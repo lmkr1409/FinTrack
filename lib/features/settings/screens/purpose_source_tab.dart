@@ -190,13 +190,19 @@ class _PurposeSourceTabState extends ConsumerState<PurposeSourceTab> {
         children: [
           Padding(
             padding: const EdgeInsets.fromLTRB(12, 12, 12, 4),
-            child: SegmentedButton<_Segment>(
-              segments: const [
-                ButtonSegment(value: _Segment.purposes, label: Text('Purpose'), icon: Icon(Icons.person_rounded, size: 18)),
-                ButtonSegment(value: _Segment.sources, label: Text('Source'), icon: Icon(Icons.keyboard_rounded, size: 18)),
+            child: Row(
+              children: [
+                Expanded(
+                  child: SegmentedButton<_Segment>(
+                    segments: const [
+                      ButtonSegment(value: _Segment.purposes, label: Text('Purpose'), icon: Icon(Icons.person_rounded, size: 18)),
+                      ButtonSegment(value: _Segment.sources, label: Text('Source'), icon: Icon(Icons.keyboard_rounded, size: 18)),
+                    ],
+                    selected: {_segment},
+                    onSelectionChanged: (s) => setState(() => _segment = s.first),
+                  ),
+                ),
               ],
-              selected: {_segment},
-              onSelectionChanged: (s) => setState(() => _segment = s.first),
             ),
           ),
           Expanded(child: _buildContent()),

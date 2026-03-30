@@ -62,7 +62,7 @@ class SmsParsingService {
 
 
       // If still missing essential info or if it's not a CREDIT/DEBIT/TRANSFER, discard
-      final type = parsedData['transactionType'];
+      var type = parsedData['transactionType'];
       if (type != 'DEBIT' && type != 'CREDIT' && type != 'TRANSFER') {
         return; 
       }
@@ -90,6 +90,18 @@ class SmsParsingService {
       int? accountId = parsedData['accountId'];
       int? cardId = parsedData['cardId'];
       int? paymentMethodId = parsedData['paymentMethodId'];
+
+      if (cardId == null && parsedData['cardNumber'] != null) {
+        final cardRepo = container.read(cardRepositoryProvider);
+        final allCards = await cardRepo.getAll();
+        String lastFour = parsedData['cardNumber'];
+        for (var c in allCards) {
+          if (c.cardNumber.contains(lastFour)) {
+            cardId = c.id;
+            break;
+          }
+        }
+      }
 
       if (matchedMerchant == null && parsedData['merchantId'] != null) {
         try {
@@ -122,11 +134,36 @@ class SmsParsingService {
           ? DateTime.fromMillisecondsSinceEpoch(timestamp)
           : DateTime.now();
 
+      // Determine nature based on type and category
+      String nature = 'TRANSACTIONS';
+      if (type == 'TRANSFER') {
+        nature = 'TRANSFERS';
+        type = 'DEBIT'; // Enforce DEBIT as base type for outward transfer
+      }
+
+      // If category is identified, inherit its exact type as nature
+      if (categoryId != null) {
+        final catRepo = container.read(categoryRepositoryProvider);
+        final category = await catRepo.getById(categoryId);
+        if (category != null) {
+          nature = category.categoryType;
+        }
+      }
+
+      // A transaction is only "auto-labeled" if ALL critical fields were determined by rules or ML
+      final isFullyParsed = categoryId != null &&
+          matchedMerchant?.id != null &&
+          paymentMethodId != null &&
+          accountId != null &&
+          cardId != null;
+          // Note: amount and type are already guaranteed non-null by earlier guards
+
       final newTransaction = Transaction(
         transactionType: type as String,
+        nature: nature,
         amount: amount,
         transactionDate: transactionDate.toIso8601String(),
-        description: body, 
+        description: body,
         merchantId: matchedMerchant?.id,
         expenseSourceId: smsSource.id,
         categoryId: categoryId,
@@ -135,7 +172,7 @@ class SmsParsingService {
         accountId: accountId,
         cardId: cardId,
         paymentMethodId: paymentMethodId,
-        isAutoLabeled: true,
+        isAutoLabeled: isFullyParsed,
         labeled: false,
       );
 

@@ -7,8 +7,10 @@ import '../features/labeling/screens/label_screen.dart';
 import '../features/labeling/screens/labeling_rules_screen.dart';
 import '../features/settings/screens/configuration_screen.dart';
 import '../features/settings/screens/export_import_screen.dart';
+import '../features/help/screens/help_screen.dart';
 
 import '../services/sms_listener_service.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 /// Root widget: Material 3 Navigation Drawer with themed gradient header.
 class AppShell extends ConsumerStatefulWidget {
@@ -30,6 +32,7 @@ class _AppShellState extends ConsumerState<AppShell> {
     'Labeling Rules',
     'Transactions',
     'Backup & Restore',
+    'Help & Guide',
   ];
   static const _screens = <Widget>[
     InsightsScreen(),
@@ -37,6 +40,7 @@ class _AppShellState extends ConsumerState<AppShell> {
     LabelingRulesScreen(),
     LabelScreen(),
     ExportImportScreen(),
+    HelpScreen(),
   ];
 
   @override
@@ -71,6 +75,17 @@ class _AppShellState extends ConsumerState<AppShell> {
       setState(() {
         _isSyncingSms = false;
       });
+      _checkOnboarding();
+    }
+  }
+
+  Future<void> _checkOnboarding() async {
+    final prefs = await SharedPreferences.getInstance();
+    final onboarded = prefs.getBool('onboarding_shown') ?? false;
+    if (!onboarded && mounted) {
+      await prefs.setBool('onboarding_shown', true);
+      // Optional: auto-navigate to help on first launch?
+      // setState(() => _selectedIndex = 5);
     }
   }
 
@@ -181,6 +196,11 @@ class _AppShellState extends ConsumerState<AppShell> {
             icon: Icon(Icons.backup_outlined),
             selectedIcon: Icon(Icons.backup),
             label: Text('Backup & Restore'),
+          ),
+          const NavigationDrawerDestination(
+            icon: Icon(Icons.help_outline_rounded),
+            selectedIcon: Icon(Icons.help_rounded),
+            label: Text('Help & Guide'),
           ),
         ],
       ),

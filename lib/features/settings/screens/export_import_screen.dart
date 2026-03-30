@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
@@ -56,6 +57,27 @@ class _ExportImportScreenState extends ConsumerState<ExportImportScreen> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('Export Failed: $e'), backgroundColor: Colors.red),
+        );
+      }
+    } finally {
+      ref.read(exportImportLoadingProvider.notifier).state = false;
+    }
+  }
+
+  Future<void> _handleDownloadDatabase() async {
+    ref.read(exportImportLoadingProvider.notifier).state = true;
+    try {
+      final service = ref.read(exportImportServiceProvider);
+      final path = await service.downloadDatabase();
+      if (mounted && path != null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Database saved to $path')),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to download database: $e'), backgroundColor: Colors.red),
         );
       }
     } finally {
@@ -139,11 +161,17 @@ class _ExportImportScreenState extends ConsumerState<ExportImportScreen> {
             child: ListView(
               padding: const EdgeInsets.all(16.0),
               children: [
-                const Padding(
-                  padding: EdgeInsets.only(bottom: 16.0),
-                  child: Text(
-                    'Backup & Restore',
-                    style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold, color: Colors.white),
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 16.0),
+                  child: Row(
+                    children: [
+                      const Expanded(
+                        child: Text(
+                          'Backup & Restore',
+                          style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold, color: Colors.white),
+                        ),
+                      ),
+                    ],
                   ),
                 ),
                 
@@ -167,7 +195,7 @@ class _ExportImportScreenState extends ConsumerState<ExportImportScreen> {
                         
                         // Filters
                         CheckboxListTile(
-                          title: const Text('Include Configuration (Accounts, Cards, Categories)'),
+                          title: const Text('Include Configuration (Accounts, Cards, Categories, Budgets, Rules)'),
                           value: _exportConfig,
                           activeColor: AppColors.primary,
                           onChanged: (val) => setState(() => _exportConfig = val ?? false),
@@ -210,7 +238,7 @@ class _ExportImportScreenState extends ConsumerState<ExportImportScreen> {
                           child: ElevatedButton.icon(
                             onPressed: isLoading ? null : _handleExport,
                             icon: const Icon(Icons.save_alt),
-                            label: const Text('Export Now'),
+                            label: const Text('Export JSON Backup'),
                             style: ElevatedButton.styleFrom(
                               padding: const EdgeInsets.symmetric(vertical: 16),
                               backgroundColor: AppColors.primary,
@@ -218,7 +246,23 @@ class _ExportImportScreenState extends ConsumerState<ExportImportScreen> {
                               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                             ),
                           ),
-                        )
+                        ),
+                        if (kDebugMode) ...[
+                          const SizedBox(height: 12),
+                          SizedBox(
+                            width: double.infinity,
+                            child: OutlinedButton.icon(
+                              onPressed: isLoading ? null : _handleDownloadDatabase,
+                              icon: const Icon(Icons.file_download, color: Colors.white),
+                              label: const Text('Download Raw Database (.db)', style: TextStyle(color: Colors.white)),
+                              style: OutlinedButton.styleFrom(
+                                padding: const EdgeInsets.symmetric(vertical: 16),
+                                side: const BorderSide(color: AppColors.primary, width: 1.5),
+                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                              ),
+                            ),
+                          ),
+                        ]
                       ],
                     ),
                   ),

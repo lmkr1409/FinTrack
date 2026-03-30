@@ -42,10 +42,10 @@ class _BudgetsTabState extends State<BudgetsTab> {
   Future<void> _loadData({bool showLoading = false}) async {
     if (showLoading) setState(() => _loading = true);
 
-    final data = await _analytics.budgetVsActual(_selectedMonth.month, _selectedMonth.year, categoryType: 'EXPENSE');
+    final data = await _analytics.budgetVsActual(_selectedMonth.month, _selectedMonth.year, categoryType: 'TRANSACTIONS');
     if (!mounted) return;
     setState(() {
-      _budgets = data;
+      _budgets = data.where((b) => b['category_name']?.toString().toLowerCase() != 'income').toList();
       _loading = false;
     });
   }

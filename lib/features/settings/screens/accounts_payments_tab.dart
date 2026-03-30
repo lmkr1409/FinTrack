@@ -301,14 +301,20 @@ class _AccountsPaymentsTabState extends ConsumerState<AccountsPaymentsTab> {
           // Segmented control
           Padding(
             padding: const EdgeInsets.fromLTRB(12, 12, 12, 4),
-            child: SegmentedButton<_Segment>(
-              segments: const [
-                ButtonSegment(value: _Segment.accounts, label: Text('Accounts'), icon: Icon(Icons.account_balance_rounded, size: 18)),
-                ButtonSegment(value: _Segment.cards, label: Text('Cards'), icon: Icon(Icons.credit_card_rounded, size: 18)),
-                ButtonSegment(value: _Segment.payments, label: Text('Payments'), icon: Icon(Icons.payments_rounded, size: 18)),
+            child: Row(
+              children: [
+                Expanded(
+                  child: SegmentedButton<_Segment>(
+                    segments: const [
+                      ButtonSegment(value: _Segment.accounts, label: Text('Accounts'), icon: Icon(Icons.account_balance_rounded, size: 18)),
+                      ButtonSegment(value: _Segment.cards, label: Text('Cards'), icon: Icon(Icons.credit_card_rounded, size: 18)),
+                      ButtonSegment(value: _Segment.payments, label: Text('Payments'), icon: Icon(Icons.payments_rounded, size: 18)),
+                    ],
+                    selected: {_segment},
+                    onSelectionChanged: (s) => setState(() => _segment = s.first),
+                  ),
+                ),
               ],
-              selected: {_segment},
-              onSelectionChanged: (s) => setState(() => _segment = s.first),
             ),
           ),
           // List content

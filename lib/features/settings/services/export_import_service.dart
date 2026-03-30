@@ -4,6 +4,10 @@ import 'dart:io';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
+import 'package:path/path.dart';
+import 'package:sqflite/sqflite.dart';
+
+import '../../../core/constants/app_constants.dart';
 
 import '../../../repositories/account_repository.dart';
 import '../../../repositories/base_repository.dart';
@@ -16,6 +20,9 @@ import '../../../repositories/merchant_repository.dart';
 import '../../../repositories/payment_method_repository.dart';
 import '../../../repositories/sub_category_repository.dart';
 import '../../../repositories/transaction_repository.dart';
+import '../../../repositories/budget_total_repository.dart';
+import '../../../repositories/merchant_rule_repository.dart';
+import '../../../repositories/transaction_rule_repository.dart';
 
 import '../../../models/account.dart';
 import '../../../models/budget.dart';
@@ -43,6 +50,9 @@ class ExportImportService {
   final _paymentMethodRepo = PaymentMethodRepository();
   final _budgetRepo = BudgetRepository();
   final _transactionRepo = TransactionRepository();
+  final _budgetTotalRepo = BudgetTotalRepository();
+  final _merchantRuleRepo = MerchantRuleRepository();
+  final _transactionRuleRepo = TransactionRuleRepository();
 
   /// EXPORT FUNCTIONALITY
   Future<String?> exportData({
@@ -55,7 +65,7 @@ class ExportImportService {
   }) async {
     try {
       final Map<String, dynamic> exportMap = {
-        'version': 1,
+        'version': 2,
         'timestamp': DateTime.now().toIso8601String(),
       };
 
@@ -103,6 +113,42 @@ class ExportImportService {
     }
   }
 
+  /// Saves the raw SQLite database file as a .db file using FilePicker.
+  Future<String?> downloadDatabase() async {
+    try {
+      final databasePath = await getDatabasesPath();
+      final path = join(databasePath, AppConstants.databaseName);
+      final file = File(path);
+
+      if (await file.exists()) {
+        final bytes = await file.readAsBytes();
+        final String fileName = AppConstants.databaseName;
+
+        String? outputFile = await FilePicker.platform.saveFile(
+          dialogTitle: 'Save Database File',
+          fileName: fileName,
+          type: FileType.any,
+          bytes: bytes,
+        );
+
+        if (outputFile == null) return null;
+
+        try {
+          final outFile = File(outputFile);
+          if (!await outFile.exists()) {
+            await outFile.writeAsBytes(bytes);
+          }
+        } catch (_) {}
+
+        return outputFile;
+      } else {
+        throw Exception('Database file not found at $path');
+      }
+    } catch (e) {
+      throw Exception('Failed to download database: $e');
+    }
+  }
+
   Future<Map<String, dynamic>> _exportConfiguration() async {
     return {
       'accounts': (await _accountRepo.getAll()).map((e) => e.toMap()).toList(),
@@ -114,6 +160,9 @@ class ExportImportService {
       'merchants': (await _merchantRepo.getAll()).map((e) => e.toMap()).toList(),
       'payment_methods': (await _paymentMethodRepo.getAll()).map((e) => e.toMap()).toList(),
       'budgets': (await _budgetRepo.getAll()).map((e) => e.toMap()).toList(),
+      'budget_totals': (await _budgetTotalRepo.getAll()).map((e) => e.toMap()).toList(),
+      'merchant_rules': (await _merchantRuleRepo.getAll()).map((e) => e.toMap()).toList(),
+      'transaction_rules': (await _transactionRuleRepo.getAll()).map((e) => e.toMap()).toList(),
     };
   }
 
@@ -167,7 +216,7 @@ class ExportImportService {
       final String jsonString = await file.readAsString();
       final Map<String, dynamic> importMap = jsonDecode(jsonString);
 
-      if (importMap['version'] != 1) {
+      if (importMap['version'] > 2) {
         throw Exception('Unsupported backup version.');
       }
 
@@ -180,6 +229,8 @@ class ExportImportService {
         'merchants': {},
         'payment_methods': {},
         'cards': {},
+        'merchant_rules': {},
+        'transaction_rules': {},
       };
 
       if (importConfig && importMap.containsKey('configuration')) {
@@ -270,6 +321,43 @@ class ExportImportService {
       idField: 'budget_id',
       fkMappings: [
         MapEntry('category_id', idMaps['categories']!),
+      ]
+    );
+
+    // 3. New Entities for Version 2
+    
+    // Budget Totals (Independent)
+    await _mapAndInsert<f_txn.Transaction>( // I'll use a dummy type or just rely on the map behavior
+        data: config['budget_totals'] ?? [],
+        repo: _budgetTotalRepo,
+        uniqueField: null,
+        idField: 'total_id',
+    );
+
+    // Merchant Rules (Dependent on merchants, categories, sub_categories, purposes)
+    idMaps['merchant_rules'] = await _mapAndInsertDependent<f_txn.Transaction>(
+      data: config['merchant_rules'] ?? [],
+      repo: _merchantRuleRepo,
+      uniqueField: 'keyword',
+      idField: 'rule_id',
+      fkMappings: [
+        MapEntry('merchant_id', idMaps['merchants']!),
+        MapEntry('category_id', idMaps['categories']!),
+        MapEntry('subcategory_id', idMaps['sub_categories']!),
+        MapEntry('purpose_id', idMaps['expense_purposes']!),
+      ]
+    );
+
+    // Transaction Rules (Dependent on accounts, cards, payment methods)
+    idMaps['transaction_rules'] = await _mapAndInsertDependent<f_txn.Transaction>(
+      data: config['transaction_rules'] ?? [],
+      repo: _transactionRuleRepo,
+      uniqueField: null, // Multiple patterns for same type/id might exist or we use a custom check
+      idField: 'rule_id',
+      fkMappings: [
+        MapEntry('account_id', idMaps['accounts']!),
+        MapEntry('card_id', idMaps['cards']!),
+        MapEntry('payment_method_id', idMaps['payment_methods']!),
       ]
     );
   }

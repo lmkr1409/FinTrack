@@ -127,8 +127,10 @@ class IconHelper {
     'attach_money': Icons.attach_money_rounded,
     'money': Icons.money_rounded,
     'monetization_on': Icons.monetization_on_rounded,
+    'money_off': Icons.money_off_rounded,
     'wallet': Icons.wallet_rounded,
     'sell': Icons.sell_rounded,
+    'credit_score': Icons.credit_score_rounded,
 
     // ─── Bills & Subscriptions ───────────────────────────────
     'receipt': Icons.receipt_rounded,

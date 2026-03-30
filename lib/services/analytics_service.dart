@@ -6,13 +6,15 @@ class AnalyticsService {
 
   // ─── Summary totals ─────────────────────────────────────
 
-  Future<double> totalByType(String type, String start, String end) async {
+  Future<double> totalByNatureAndType(String nature, String? transactionType, String start, String end) async {
     final db = await _db.database;
-    final r = await db.rawQuery(
-      'SELECT COALESCE(SUM(amount),0) as total FROM "transaction" '
-      'WHERE transaction_type=? AND transaction_date>=? AND transaction_date<=?',
-      [type, start, end],
-    );
+    String query = 'SELECT COALESCE(SUM(amount),0) as total FROM "transaction" WHERE nature=? AND transaction_date>=? AND transaction_date<=?';
+    List<Object?> args = [nature, start, end];
+    if (transactionType != null) {
+      query += ' AND transaction_type=?';
+      args.add(transactionType);
+    }
+    final r = await db.rawQuery(query, args);
     return (r.first['total'] as num?)?.toDouble() ?? 0;
   }
 
@@ -20,7 +22,7 @@ class AnalyticsService {
     final db = await _db.database;
     final r = await db.rawQuery(
       'SELECT COUNT(*) as count FROM "transaction" '
-      'WHERE transaction_date>=? AND transaction_date<=?',
+      'WHERE nature=\'TRANSACTIONS\' AND transaction_date>=? AND transaction_date<=?',
       [start, end],
     );
     return (r.first['count'] as num?)?.toInt() ?? 0;
@@ -30,7 +32,7 @@ class AnalyticsService {
     final db = await _db.database;
     final r = await db.rawQuery(
       'SELECT COALESCE(MAX(amount),0) as max_amount FROM "transaction" '
-      'WHERE transaction_type=\'DEBIT\' AND transaction_date>=? AND transaction_date<=?',
+      'WHERE nature=\'TRANSACTIONS\' AND transaction_type=\'DEBIT\' AND transaction_date>=? AND transaction_date<=?',
       [start, end],
     );
     return (r.first['max_amount'] as num?)?.toDouble() ?? 0;
@@ -44,7 +46,7 @@ class AnalyticsService {
       'SELECT c.category_id, c.category_name, c.icon, c.icon_color, '
       'COALESCE(SUM(t.amount),0) as total '
       'FROM "transaction" t JOIN category c ON t.category_id=c.category_id '
-      'WHERE t.transaction_type=\'DEBIT\' AND t.transaction_date>=? AND t.transaction_date<=? '
+      'WHERE t.nature=\'TRANSACTIONS\' AND t.transaction_type=\'DEBIT\' AND substr(t.transaction_date, 1, 10)>=? AND substr(t.transaction_date, 1, 10)<=? '
       'GROUP BY c.category_id ORDER BY total DESC LIMIT ?',
       [start, end, limit],
     );
@@ -56,7 +58,7 @@ class AnalyticsService {
       'SELECT m.merchant_id, m.merchant_name, m.icon, m.icon_color, '
       'COALESCE(SUM(t.amount),0) as total '
       'FROM "transaction" t JOIN merchant m ON t.merchant_id=m.merchant_id '
-      'WHERE t.transaction_type=\'DEBIT\' AND t.transaction_date>=? AND t.transaction_date<=? '
+      'WHERE t.nature=\'TRANSACTIONS\' AND t.transaction_type=\'DEBIT\' AND substr(t.transaction_date, 1, 10)>=? AND substr(t.transaction_date, 1, 10)<=? '
       'GROUP BY m.merchant_id ORDER BY total DESC LIMIT ?',
       [start, end, limit],
     );
@@ -68,7 +70,7 @@ class AnalyticsService {
       'SELECT a.account_id, a.account_name, a.icon, a.icon_color, '
       'COALESCE(SUM(t.amount),0) as total '
       'FROM "transaction" t JOIN account a ON t.account_id=a.account_id '
-      'WHERE t.transaction_type=\'DEBIT\' AND t.transaction_date>=? AND t.transaction_date<=? '
+      'WHERE t.nature=\'TRANSACTIONS\' AND t.transaction_type=\'DEBIT\' AND substr(t.transaction_date, 1, 10)>=? AND substr(t.transaction_date, 1, 10)<=? '
       'GROUP BY a.account_id ORDER BY total DESC LIMIT ?',
       [start, end, limit],
     );
@@ -80,8 +82,20 @@ class AnalyticsService {
       'SELECT p.purpose_id, p.expense_for, p.icon, p.icon_color, '
       'COALESCE(SUM(t.amount),0) as total '
       'FROM "transaction" t JOIN expense_purpose p ON t.purpose_id=p.purpose_id '
-      'WHERE t.transaction_type=\'DEBIT\' AND t.transaction_date>=? AND t.transaction_date<=? '
+      'WHERE t.nature=\'TRANSACTIONS\' AND t.transaction_type=\'DEBIT\' AND substr(t.transaction_date, 1, 10)>=? AND substr(t.transaction_date, 1, 10)<=? '
       'GROUP BY p.purpose_id ORDER BY total DESC LIMIT ?',
+      [start, end, limit],
+    );
+  }
+
+  Future<List<Map<String, dynamic>>> topCards(String start, String end, {int limit = 5}) async {
+    final db = await _db.database;
+    return db.rawQuery(
+      'SELECT c.card_id, c.card_name, c.icon, c.icon_color, '
+      'COALESCE(SUM(t.amount),0) as total '
+      'FROM "transaction" t JOIN cards c ON t.card_id=c.card_id '
+      'WHERE t.nature=\'TRANSACTIONS\' AND t.transaction_type=\'DEBIT\' AND substr(t.transaction_date, 1, 10)>=? AND substr(t.transaction_date, 1, 10)<=? '
+      'GROUP BY c.card_id ORDER BY total DESC LIMIT ?',
       [start, end, limit],
     );
   }
@@ -92,7 +106,7 @@ class AnalyticsService {
     final db = await _db.database;
     return db.rawQuery(
       'SELECT substr(transaction_date, 1, 10) as period, COALESCE(SUM(amount),0) as total '
-      'FROM "transaction" WHERE transaction_type=\'DEBIT\' '
+      'FROM "transaction" WHERE nature=\'TRANSACTIONS\' AND transaction_type=\'DEBIT\' '
       'AND substr(transaction_date, 1, 10)>=? AND substr(transaction_date, 1, 10)<=? '
       'GROUP BY period ORDER BY period',
       [start, end],
@@ -103,7 +117,7 @@ class AnalyticsService {
     final db = await _db.database;
     return db.rawQuery(
       'SELECT substr(transaction_date,1,7) as period, COALESCE(SUM(amount),0) as total '
-      'FROM "transaction" WHERE transaction_type=\'DEBIT\' '
+      'FROM "transaction" WHERE nature=\'TRANSACTIONS\' AND transaction_type=\'DEBIT\' '
       'AND transaction_date>=? AND transaction_date<=? '
       'GROUP BY period ORDER BY period',
       [start, end],
@@ -121,8 +135,8 @@ class AnalyticsService {
     final result = await db.rawQuery('''
       SELECT 
         substr(transaction_date, 1, 7) as period, 
-        COALESCE(SUM(CASE WHEN transaction_type = 'CREDIT' THEN amount ELSE 0 END), 0) as income,
-        COALESCE(SUM(CASE WHEN transaction_type = 'DEBIT' THEN amount ELSE 0 END), 0) as expense
+        COALESCE(SUM(CASE WHEN nature = 'TRANSACTIONS' AND transaction_type = 'CREDIT' THEN amount ELSE 0 END), 0) as income,
+        COALESCE(SUM(CASE WHEN nature = 'TRANSACTIONS' AND transaction_type = 'DEBIT' THEN amount ELSE 0 END), 0) as expense
       FROM "transaction" 
       WHERE transaction_date >= ?
       GROUP BY period 
@@ -190,7 +204,7 @@ class AnalyticsService {
     final expenseQuery = await db.rawQuery('''
       SELECT substr(transaction_date, 1, 7) as period, COALESCE(SUM(amount), 0) as total_expense
       FROM "transaction"
-      WHERE transaction_type='DEBIT' AND transaction_date >= ?
+      WHERE nature='TRANSACTIONS' AND transaction_type='DEBIT' AND transaction_date >= ?
       GROUP BY period
     ''', [startStr]);
 
@@ -229,16 +243,15 @@ class AnalyticsService {
     };
   }
 
-  Future<List<Map<String, dynamic>>> budgetVsActual(int month, int year, {String categoryType = 'EXPENSE'}) async {
+  Future<List<Map<String, dynamic>>> budgetVsActual(int month, int year, {String categoryType = 'TRANSACTIONS'}) async {
     final db = await _db.database;
     final start = '$year-${month.toString().padLeft(2, '0')}-01';
     final endMonth = month == 12 ? 1 : month + 1;
     final endYear = month == 12 ? year + 1 : year;
     final end = '$endYear-${endMonth.toString().padLeft(2, '0')}-01';
 
-    String transactionTypeFilter = 'DEBIT';
-    if (categoryType == 'INCOME') transactionTypeFilter = 'CREDIT';
-    if (categoryType == 'TRANSFER') transactionTypeFilter = 'TRANSFER';
+    // Map 'EXPENSE' to 'TRANSACTIONS' for backward compatibility
+    final effectiveType = (categoryType == 'EXPENSE') ? 'TRANSACTIONS' : categoryType;
 
     final result = await db.rawQuery('''
       SELECT 
@@ -251,7 +264,7 @@ class AnalyticsService {
         COALESCE(ba.budget_amount, 0) as budget_amount_annual, -- Yearly
         COALESCE((
           SELECT SUM(t.amount) FROM "transaction" t 
-          WHERE t.category_id = c.category_id AND t.transaction_type = ? 
+          WHERE t.category_id = c.category_id AND t.nature = 'TRANSACTIONS' AND t.transaction_type = 'DEBIT'
           AND t.transaction_date >= ? AND t.transaction_date < ?
         ), 0) as actual
       FROM category c
@@ -260,12 +273,12 @@ class AnalyticsService {
       LEFT JOIN budget ba ON c.category_id = ba.category_id 
         AND ba.budget_frequency = 'ANNUAL' AND ba.year = ?
       WHERE c.category_type = ?
-    ''', [transactionTypeFilter, start, end, month, year, year, categoryType]);
+    ''', [start, end, month, year, year, effectiveType]);
 
     // Convert to mutable maps to add global budget info if needed
     final list = List<Map<String, dynamic>>.from(result.map((e) => Map<String, dynamic>.from(e)));
 
-    if (categoryType == 'EXPENSE') {
+    if (categoryType == 'TRANSACTIONS') {
       // Add Global Budget as a special entry with category_id = null
       final globalBudget = await db.rawQuery(
         'SELECT budget_amount FROM budget_total WHERE budget_frequency = \'MONTHLY\' AND month = ? AND year = ?',
@@ -274,7 +287,7 @@ class AnalyticsService {
       if (globalBudget.isNotEmpty) {
         // We calculate total actual expenses for the month
         final totalActual = await db.rawQuery(
-          'SELECT SUM(amount) as total FROM "transaction" WHERE transaction_type = \'DEBIT\' AND transaction_date >= ? AND transaction_date < ?',
+          'SELECT SUM(amount) as total FROM "transaction" WHERE nature = \'TRANSACTIONS\' AND transaction_type = \'DEBIT\' AND transaction_date >= ? AND transaction_date < ?',
           [start, end]
         );
         list.add({
@@ -282,7 +295,7 @@ class AnalyticsService {
           'category_name': 'Total Budget',
           'budget_amount': (globalBudget.first['budget_amount'] as num).toDouble(),
           'actual': (totalActual.first['total'] as num?)?.toDouble() ?? 0.0,
-          'category_type': 'EXPENSE',
+          'category_type': 'TRANSACTIONS',
         });
       }
     }
@@ -302,7 +315,7 @@ class AnalyticsService {
         SUM(t.amount) as value
       FROM "transaction" t
       LEFT JOIN category c ON t.category_id = c.category_id
-      WHERE t.transaction_type = 'DEBIT' AND t.transaction_date >= ? AND t.transaction_date <= ?
+      WHERE t.nature='TRANSACTIONS' AND t.transaction_type='DEBIT' AND t.transaction_date >= ? AND t.transaction_date <= ?
       GROUP BY c.category_id
       HAVING value > 0
       ORDER BY value DESC
@@ -318,7 +331,7 @@ class AnalyticsService {
         SUM(t.amount) as value
       FROM "transaction" t
       LEFT JOIN payment_method p ON t.payment_method_id = p.payment_method_id
-      WHERE t.transaction_type = 'DEBIT' AND t.transaction_date >= ? AND t.transaction_date <= ?
+      WHERE t.nature='TRANSACTIONS' AND t.transaction_type='DEBIT' AND t.transaction_date >= ? AND t.transaction_date <= ?
       GROUP BY p.payment_method_id
       HAVING value > 0
       ORDER BY value DESC
@@ -334,7 +347,7 @@ class AnalyticsService {
         SUM(t.amount) as value
       FROM "transaction" t
       LEFT JOIN account a ON t.account_id = a.account_id
-      WHERE t.transaction_type = 'DEBIT' AND t.transaction_date >= ? AND t.transaction_date <= ?
+      WHERE t.nature='TRANSACTIONS' AND t.transaction_type='DEBIT' AND t.transaction_date >= ? AND t.transaction_date <= ?
       GROUP BY a.account_id
       HAVING value > 0
       ORDER BY value DESC
@@ -350,7 +363,7 @@ class AnalyticsService {
         SUM(t.amount) as value
       FROM "transaction" t
       LEFT JOIN cards c ON t.card_id = c.card_id
-      WHERE t.transaction_type = 'DEBIT' AND t.transaction_date >= ? AND t.transaction_date <= ?
+      WHERE t.nature='TRANSACTIONS' AND t.transaction_type='DEBIT' AND t.transaction_date >= ? AND t.transaction_date <= ?
       GROUP BY c.card_id
       HAVING value > 0
       ORDER BY value DESC
@@ -366,7 +379,7 @@ class AnalyticsService {
         SUM(t.amount) as value
       FROM "transaction" t
       LEFT JOIN sub_category s ON t.subcategory_id = s.subcategory_id
-      WHERE t.transaction_type = 'DEBIT' AND t.transaction_date >= ? AND t.transaction_date <= ? AND t.category_id = ?
+      WHERE t.nature='TRANSACTIONS' AND t.transaction_type='DEBIT' AND t.transaction_date >= ? AND t.transaction_date <= ? AND t.category_id = ?
       GROUP BY s.subcategory_id
       HAVING value > 0
       ORDER BY value DESC
@@ -382,7 +395,7 @@ class AnalyticsService {
         SUM(t.amount) as value
       FROM "transaction" t
       LEFT JOIN expense_purpose p ON t.purpose_id = p.purpose_id
-      WHERE t.transaction_type = 'DEBIT' AND t.transaction_date >= ? AND t.transaction_date <= ?
+      WHERE t.nature='TRANSACTIONS' AND t.transaction_type='DEBIT' AND t.transaction_date >= ? AND t.transaction_date <= ?
       GROUP BY p.purpose_id
       HAVING value > 0
       ORDER BY value DESC

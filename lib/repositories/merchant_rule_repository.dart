@@ -1,65 +1,26 @@
-import 'package:sqflite/sqflite.dart';
+import 'base_repository.dart';
 import '../models/merchant_rule.dart';
-import '../core/database/database_service.dart';
 
-class MerchantRuleRepository {
-  final DatabaseService _databaseService = DatabaseService();
+class MerchantRuleRepository extends BaseRepository<MerchantRule> {
+  @override
+  String get tableName => 'merchant_rule';
 
-  Future<int> insert(Map<String, dynamic> row) async {
-    final db = await _databaseService.database;
-    return await db.insert('merchant_rule', row, conflictAlgorithm: ConflictAlgorithm.replace);
-  }
+  @override
+  String get primaryKey => 'rule_id';
 
-  Future<List<MerchantRule>> getAll() async {
-    final db = await _databaseService.database;
-    final List<Map<String, dynamic>> maps = await db.query('merchant_rule');
-    return maps.map((e) => MerchantRule.fromMap(e)).toList();
-  }
+  @override
+  MerchantRule fromMap(Map<String, dynamic> map) => MerchantRule.fromMap(map);
 
   Future<List<MerchantRule>> getAllSorted() async {
-    final db = await _databaseService.database;
-    final List<Map<String, dynamic>> maps = await db.query('merchant_rule', orderBy: 'rule_id DESC');
-    return maps.map((e) => MerchantRule.fromMap(e)).toList();
-  }
-
-  Future<MerchantRule?> getById(int id) async {
-    final db = await _databaseService.database;
-    final List<Map<String, dynamic>> maps = await db.query(
-      'merchant_rule',
-      where: 'rule_id = ?',
-      whereArgs: [id],
-    );
-    if (maps.isNotEmpty) return MerchantRule.fromMap(maps.first);
-    return null;
+    return await getAll(orderBy: 'rule_id DESC');
   }
 
   Future<MerchantRule?> getByMerchantId(int merchantId) async {
-    final db = await _databaseService.database;
-    final List<Map<String, dynamic>> maps = await db.query(
-      'merchant_rule',
+    final list = await query(
       where: 'merchant_id = ?',
       whereArgs: [merchantId],
     );
-    if (maps.isNotEmpty) return MerchantRule.fromMap(maps.first);
+    if (list.isNotEmpty) return list.first;
     return null;
-  }
-
-  Future<int> update(int id, Map<String, dynamic> row) async {
-    final db = await _databaseService.database;
-    return await db.update(
-      'merchant_rule',
-      row,
-      where: 'rule_id = ?',
-      whereArgs: [id],
-    );
-  }
-
-  Future<int> delete(int id) async {
-    final db = await _databaseService.database;
-    return await db.delete(
-      'merchant_rule',
-      where: 'rule_id = ?',
-      whereArgs: [id],
-    );
   }
 }

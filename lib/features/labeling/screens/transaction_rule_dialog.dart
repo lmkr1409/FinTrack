@@ -245,7 +245,31 @@ class _TransactionRuleDialogState extends ConsumerState<TransactionRuleDialog> {
                   if (widget.ruleType == 'TRANSACTION_TYPE')
                     DropdownButtonFormField<String?>(
                       initialValue: _mappedType,
-                      decoration: const InputDecoration(labelText: 'Transaction Type', prefixIcon: Icon(Icons.swap_horiz_rounded)),
+                    decoration: const InputDecoration(
+                      labelText: 'Transaction Type',
+                      isDense: true,
+                      contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+                      prefixIcon: Icon(Icons.swap_horiz_rounded),
+                    ),
+                      selectedItemBuilder: (context) => [
+                        null,
+                        'DEBIT',
+                        'CREDIT',
+                        'TRANSFER',
+                      ].map((e) {
+                        final label = e == null
+                            ? 'Select Type'
+                            : e == 'DEBIT'
+                                ? 'Debit (Expense)'
+                                : e == 'CREDIT'
+                                    ? 'Credit (Income)'
+                                    : 'Transfer';
+                        return FittedBox(
+                          fit: BoxFit.scaleDown,
+                          alignment: Alignment.centerLeft,
+                          child: Text(label),
+                        );
+                      }).toList(),
                       items: const [
                         DropdownMenuItem(value: null, child: Text('Select Type')),
                         DropdownMenuItem(value: 'DEBIT', child: Text('Debit (Expense)')),

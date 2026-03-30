@@ -46,7 +46,10 @@ class _LabelScreenState extends ConsumerState<LabelScreen>
   int? _filterYear;
   int? _filterAccountId;
   int? _filterCardId;
+  int? _filterCategoryId;
+  int? _filterMerchantId;
   String? _filterType;
+  String? _filterNature;
   String? _filterSort;
 
   // Lookup maps for displaying labels
@@ -60,6 +63,9 @@ class _LabelScreenState extends ConsumerState<LabelScreen>
   Map<int, ExpensePurpose> _purposeMap = {};
 
   bool _loading = true;
+  bool _isSyncing = false;
+  int _syncTotal = 0;
+  int _syncCurrent = 0;
 
   @override
   void initState() {
@@ -93,7 +99,10 @@ class _LabelScreenState extends ConsumerState<LabelScreen>
       year: _filterYear,
       accountId: _filterAccountId,
       cardId: _filterCardId,
+      categoryId: _filterCategoryId,
+      merchantId: _filterMerchantId,
       transactionType: _filterType,
+      nature: _filterNature,
       orderBy: _filterSort,
     );
     final unlabeled = await repo.getFiltered(
@@ -103,7 +112,10 @@ class _LabelScreenState extends ConsumerState<LabelScreen>
       year: _filterYear,
       accountId: _filterAccountId,
       cardId: _filterCardId,
+      categoryId: _filterCategoryId,
+      merchantId: _filterMerchantId,
       transactionType: _filterType,
+      nature: _filterNature,
       orderBy: _filterSort,
     );
     final autoLabeled = await repo.getFiltered(
@@ -113,7 +125,10 @@ class _LabelScreenState extends ConsumerState<LabelScreen>
       year: _filterYear,
       accountId: _filterAccountId,
       cardId: _filterCardId,
+      categoryId: _filterCategoryId,
+      merchantId: _filterMerchantId,
       transactionType: _filterType,
+      nature: _filterNature,
       orderBy: _filterSort,
     );
     final labeled = await repo.getFiltered(
@@ -122,7 +137,10 @@ class _LabelScreenState extends ConsumerState<LabelScreen>
       year: _filterYear,
       accountId: _filterAccountId,
       cardId: _filterCardId,
+      categoryId: _filterCategoryId,
+      merchantId: _filterMerchantId,
       transactionType: _filterType,
+      nature: _filterNature,
       orderBy: _filterSort,
     );
 
@@ -248,6 +266,8 @@ class _LabelScreenState extends ConsumerState<LabelScreen>
                       ],
                     ),
                   ),
+                  if (_isSyncing)
+                    _buildSyncProgressOverlay(),
                 ],
               ),
       ),
@@ -305,7 +325,10 @@ class _LabelScreenState extends ConsumerState<LabelScreen>
         _filterYear != null ||
         _filterAccountId != null ||
         _filterCardId != null ||
+        _filterCategoryId != null ||
+        _filterMerchantId != null ||
         _filterType != null ||
+        _filterNature != null ||
         _filterSort != null;
 
     return Padding(
@@ -347,9 +370,30 @@ class _LabelScreenState extends ConsumerState<LabelScreen>
                             _loadData();
                           },
                         ),
+                      if (_filterCategoryId != null)
+                        _chip(
+                          _categoryMap[_filterCategoryId]?.categoryName ?? 'Category',
+                          () {
+                            setState(() => _filterCategoryId = null);
+                            _loadData();
+                          },
+                        ),
+                      if (_filterMerchantId != null)
+                        _chip(
+                          _merchantMap[_filterMerchantId]?.merchantName ?? 'Merchant',
+                          () {
+                            setState(() => _filterMerchantId = null);
+                            _loadData();
+                          },
+                        ),
                       if (_filterType != null)
                         _chip(_filterType!, () {
                           setState(() => _filterType = null);
+                          _loadData();
+                        }),
+                      if (_filterNature != null)
+                        _chip(_filterNature!, () {
+                          setState(() => _filterNature = null);
                           _loadData();
                         }),
                       if (_filterSort != null)
@@ -368,9 +412,14 @@ class _LabelScreenState extends ConsumerState<LabelScreen>
                         ),
                     ],
                   )
-                : const Text(
-                    'All transactions',
-                    style: TextStyle(fontSize: 12, color: AppColors.textMuted),
+                : Text(
+                    [
+                      'All transactions',
+                      'Unlabeled transactions',
+                      'Auto-labeled transactions',
+                      'Labeled transactions'
+                    ][_tabController.index],
+                    style: const TextStyle(fontSize: 12, color: AppColors.textMuted),
                   ),
           ),
           IconButton(
@@ -380,6 +429,11 @@ class _LabelScreenState extends ConsumerState<LabelScreen>
             ),
             tooltip: 'Filters',
             onPressed: _showFilterDialog,
+          ),
+          IconButton(
+            icon: const Icon(Icons.history_toggle_off_rounded, color: AppColors.primary),
+            tooltip: 'Hard Reload',
+            onPressed: _showHardReloadDialog,
           ),
           IconButton(
             icon: const Icon(Icons.delete_sweep_rounded, color: AppColors.expense),
@@ -410,7 +464,10 @@ class _LabelScreenState extends ConsumerState<LabelScreen>
     int? year = _filterYear;
     int? accountId = _filterAccountId;
     int? cardId = _filterCardId;
+    int? categoryId = _filterCategoryId;
+    int? merchantId = _filterMerchantId;
     String? type = _filterType;
+    String? nature = _filterNature;
     String? sort = _filterSort;
 
     showModalBottomSheet(
@@ -576,25 +633,71 @@ class _LabelScreenState extends ConsumerState<LabelScreen>
                     ),
                   ),
                   row(
+                    'Category',
+                    drop<int>(
+                      hint: 'Category',
+                      value: categoryId,
+                      items: _categoryMap.values
+                          .map((c) => DropdownMenuItem(
+                              value: c.id,
+                              child: Text(c.categoryName,
+                                  style: const TextStyle(fontSize: 12))))
+                          .toList(),
+                      onChanged: (v) => categoryId = v,
+                    ),
+                  ),
+                  row(
+                    'Merchant',
+                    drop<int>(
+                      hint: 'Merchant',
+                      value: merchantId,
+                      items: _merchantMap.values
+                          .map((m) => DropdownMenuItem(
+                              value: m.id,
+                              child: Text(m.merchantName,
+                                  style: const TextStyle(fontSize: 12))))
+                          .toList(),
+                      onChanged: (v) => merchantId = v,
+                    ),
+                  ),
+                  row(
                     'Type',
                     drop<String>(
-                      hint: 'Type',
+                      hint: 'Physical Type',
                       value: type,
                       items: const [
                         DropdownMenuItem(
                             value: 'DEBIT',
-                            child: Text('Debit',
+                            child: Text('Debit (Out)',
                                 style: TextStyle(fontSize: 12))),
                         DropdownMenuItem(
                             value: 'CREDIT',
-                            child: Text('Credit',
-                                style: TextStyle(fontSize: 12))),
-                        DropdownMenuItem(
-                            value: 'TRANSFER',
-                            child: Text('Transfer',
+                            child: Text('Credit (In)',
                                 style: TextStyle(fontSize: 12))),
                       ],
                       onChanged: (v) => type = v,
+                    ),
+                  ),
+                  row(
+                    'Nature',
+                    drop<String>(
+                      hint: 'Nature',
+                      value: nature,
+                      items: const [
+                        DropdownMenuItem(
+                            value: 'TRANSACTIONS',
+                            child: Text('Transactions',
+                                style: TextStyle(fontSize: 12))),
+                        DropdownMenuItem(
+                            value: 'TRANSFERS',
+                            child: Text('Transfers',
+                                style: TextStyle(fontSize: 12))),
+                        DropdownMenuItem(
+                            value: 'INVESTMENTS',
+                            child: Text('Investments',
+                                style: TextStyle(fontSize: 12))),
+                      ],
+                      onChanged: (v) => nature = v,
                     ),
                   ),
                   const SizedBox(height: 16),
@@ -608,6 +711,8 @@ class _LabelScreenState extends ConsumerState<LabelScreen>
                             _filterYear = null;
                             _filterAccountId = null;
                             _filterCardId = null;
+                            _filterCategoryId = null;
+                            _filterMerchantId = null;
                             _filterType = null;
                             _filterSort = null;
                           });
@@ -624,7 +729,10 @@ class _LabelScreenState extends ConsumerState<LabelScreen>
                             _filterYear = year;
                             _filterAccountId = accountId;
                             _filterCardId = cardId;
+                            _filterCategoryId = categoryId;
+                            _filterMerchantId = merchantId;
                             _filterType = type;
+                            _filterNature = nature;
                             _filterSort = sort;
                           });
                           _loadData();
@@ -764,6 +872,14 @@ class _LabelScreenState extends ConsumerState<LabelScreen>
                 onTap: () {
                   Navigator.pop(ctx);
                   _deleteAllFlow();
+                },
+              ),
+              ListTile(
+                leading: const Icon(Icons.refresh_rounded, color: AppColors.primary),
+                title: const Text('Hard Reload', style: TextStyle(color: AppColors.primary)),
+                onTap: () {
+                  Navigator.pop(ctx);
+                  _showHardReloadDialog();
                 },
               ),
             ],
@@ -1207,18 +1323,26 @@ class _LabelScreenState extends ConsumerState<LabelScreen>
                       ? ColorHelper.fromHex(
                           cat.iconColor,
                         ).withValues(alpha: 0.15)
-                      : AppColors.surfaceContainer,
+                      : (txn.nature == 'TRANSFERS'
+                          ? (isDebit ? AppColors.expense : AppColors.income)
+                              .withValues(alpha: 0.15)
+                          : AppColors.surfaceContainer),
                   child: cat != null
                       ? Icon(
                           IconHelper.getIcon(cat.icon),
                           color: ColorHelper.fromHex(cat.iconColor),
                         )
-                      : Icon(
-                          isDebit
-                              ? Icons.arrow_upward_rounded
-                              : Icons.arrow_downward_rounded,
-                          color: isDebit ? AppColors.expense : AppColors.income,
-                        ),
+                      : (txn.nature == 'TRANSFERS'
+                          ? Icon(
+                              Icons.swap_horiz_rounded,
+                              color: isDebit ? AppColors.expense : AppColors.income,
+                            )
+                          : Icon(
+                              isDebit
+                                  ? Icons.arrow_upward_rounded
+                                  : Icons.arrow_downward_rounded,
+                              color: isDebit ? AppColors.expense : AppColors.income,
+                            )),
                 ),
               ),
               // Text
@@ -1299,6 +1423,107 @@ class _LabelScreenState extends ConsumerState<LabelScreen>
                 ],
               ),
             ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _showHardReloadDialog() async {
+    final DateTime? picked = await showDatePicker(
+      context: context,
+      initialDate: DateTime.now().subtract(const Duration(days: 30)),
+      firstDate: DateTime(2020),
+      lastDate: DateTime.now(),
+      helpText: 'RELOAD FROM DATE',
+    );
+    if (picked == null) return;
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Row(
+          children: [
+            Icon(Icons.warning_amber_rounded, color: AppColors.expense),
+            SizedBox(width: 8),
+            Text('Hard Reload'),
+          ],
+        ),
+        content: Text(
+          'This will DELETE all existing transactions from ${DateFormat('yyyy-MM-dd').format(picked)} onwards and re-scan your SMS inbox. '
+          'Manual labels and custom categorizations for this period will be LOST.\n\nProceed?',
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+          FilledButton(
+            style: FilledButton.styleFrom(backgroundColor: AppColors.expense),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Hard Reload'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true) {
+      if (!mounted) return;
+      setState(() {
+        _isSyncing = true;
+        _syncTotal = 0;
+        _syncCurrent = 0;
+      });
+
+      final container = ProviderScope.containerOf(context);
+      await SmsListenerService.hardReloadSync(
+        container,
+        picked,
+        onProgress: (current, total) {
+          if (mounted) {
+            setState(() {
+              _syncCurrent = current;
+              _syncTotal = total;
+            });
+          }
+        },
+      );
+
+      if (mounted) {
+        setState(() => _isSyncing = false);
+        await _loadData();
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Hard reload completed successfully.')),
+        );
+      }
+    }
+  }
+
+  Widget _buildSyncProgressOverlay() {
+    double progress = _syncTotal > 0 ? _syncCurrent / _syncTotal : 0.0;
+    return Container(
+      color: Colors.black54,
+      child: Center(
+        child: GlassCard(
+          child: Padding(
+            padding: const EdgeInsets.all(24.0),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const CircularProgressIndicator(),
+                const SizedBox(height: 24),
+                const Text('Hard Reloading...',
+                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
+                const SizedBox(height: 8),
+                const Text('Deleting existing records and re-syncing SMS',
+                    style: TextStyle(fontSize: 12, color: AppColors.textMuted),
+                    textAlign: TextAlign.center),
+                const SizedBox(height: 16),
+                if (_syncTotal > 0) ...[
+                  LinearProgressIndicator(value: progress),
+                  const SizedBox(height: 8),
+                  Text('$_syncCurrent / $_syncTotal (${(progress * 100).round()}%)'),
+                ] else
+                  const Text('Initializing...'),
+              ],
+            ),
           ),
         ),
       ),

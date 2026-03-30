@@ -113,12 +113,19 @@ class _MerchantsTabState extends ConsumerState<MerchantsTab> {
     if (_loading) return const Center(child: CircularProgressIndicator());
 
     return Scaffold(
-      body: _merchants.isEmpty
-          ? Center(child: Text('No merchants yet.', style: TextStyle(color: cs.onSurfaceVariant)))
-          : ListView.builder(
-              padding: const EdgeInsets.only(bottom: 80),
-              itemCount: _merchants.length,
-              itemBuilder: (context, i) {
+      body: Column(
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
+            child: const Text('Manage Merchants', style: TextStyle(color: Colors.white70, fontSize: 13, fontWeight: FontWeight.bold)),
+          ),
+          Expanded(
+            child: _merchants.isEmpty
+                ? Center(child: Text('No merchants yet.', style: TextStyle(color: cs.onSurfaceVariant)))
+                : ListView.builder(
+                    padding: const EdgeInsets.only(bottom: 80),
+                    itemCount: _merchants.length,
+                    itemBuilder: (context, i) {
                 final m = _merchants[i];
                 return Card(
                   margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
@@ -136,6 +143,9 @@ class _MerchantsTabState extends ConsumerState<MerchantsTab> {
                 );
               },
             ),
+          ),
+        ],
+      ),
       floatingActionButton: FloatingActionButton(
         onPressed: () => _showMerchantDialog(),
         child: const Icon(Icons.add),

@@ -26,11 +26,13 @@ class _AnalyticsTabState extends State<AnalyticsTab> {
   List<Map<String, dynamic>> _topCategories = [];
   List<Map<String, dynamic>> _topMerchants = [];
   List<Map<String, dynamic>> _topAccounts = [];
+  List<Map<String, dynamic>> _topCards = [];
   List<Map<String, dynamic>> _topPurposes = [];
   
   int _limitCategories = 5;
   int _limitMerchants = 5;
   int _limitAccounts = 5;
+  int _limitCards = 5;
   int _limitPurposes = 5;
   
   DateTime _selectedMonth = DateTime(DateTime.now().year, DateTime.now().month);
@@ -52,12 +54,14 @@ class _AnalyticsTabState extends State<AnalyticsTab> {
     final cats = await _analytics.topCategories(monthStart, monthEnd, limit: _limitCategories);
     final merchs = await _analytics.topMerchants(monthStart, monthEnd, limit: _limitMerchants);
     final accs = await _analytics.topAccounts(monthStart, monthEnd, limit: _limitAccounts);
+    final cards = await _analytics.topCards(monthStart, monthEnd, limit: _limitCards);
     final purps = await _analytics.topPurposes(monthStart, monthEnd, limit: _limitPurposes);
     
     setState(() {
       _topCategories = cats;
       _topMerchants = merchs;
       _topAccounts = accs;
+      _topCards = cards;
       _topPurposes = purps;
       _loading = false;
     });
@@ -79,7 +83,7 @@ class _AnalyticsTabState extends State<AnalyticsTab> {
 
   Widget _buildContent() {
     // Only show full-screen loader if no data exists and we are loading
-    final hasNoData = _topCategories.isEmpty && _topMerchants.isEmpty && _topAccounts.isEmpty && _topPurposes.isEmpty;
+    final hasNoData = _topCategories.isEmpty && _topMerchants.isEmpty && _topAccounts.isEmpty && _topCards.isEmpty && _topPurposes.isEmpty;
     if (_loading && hasNoData) return const Center(child: CircularProgressIndicator());
 
     return Stack(
@@ -131,6 +135,21 @@ class _AnalyticsTabState extends State<AnalyticsTab> {
             } : null,
             onLess: _limitAccounts > 5 ? () {
               setState(() => _limitAccounts -= 5);
+              _loadData();
+            } : null,
+          ),
+          const SizedBox(height: 16),
+          _TopSection(
+            title: 'Top Cards',
+            items: _topCards,
+            nameKey: 'card_name',
+            limit: _limitCards,
+            onMore: _limitCards < 20 ? () {
+              setState(() => _limitCards += 5);
+              _loadData();
+            } : null,
+            onLess: _limitCards > 5 ? () {
+              setState(() => _limitCards -= 5);
               _loadData();
             } : null,
           ),
@@ -213,13 +232,17 @@ class _TopSection extends StatelessWidget {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text(
-                title,
-                style: const TextStyle(
-                  fontWeight: FontWeight.bold,
-                  color: AppColors.primary,
-                  fontSize: 14,
-                ),
+              Row(
+                children: [
+                  Text(
+                    title,
+                    style: const TextStyle(
+                      fontWeight: FontWeight.bold,
+                      color: AppColors.primary,
+                      fontSize: 14,
+                    ),
+                  ),
+                ],
               ),
               Row(
                 children: [

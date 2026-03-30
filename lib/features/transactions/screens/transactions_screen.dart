@@ -34,10 +34,11 @@ class _TransactionsScreenState extends ConsumerState<TransactionsScreen> {
 
   int? _filterMonth;
   int? _filterYear;
-  String? _transactionType;
   int? _filterCategoryId;
   int? _filterAccountId;
   int? _filterMerchantId;
+  String? _filterType;
+  String? _nature;
   String? _filterSort;
 
   @override
@@ -64,7 +65,8 @@ class _TransactionsScreenState extends ConsumerState<TransactionsScreen> {
     _accountMap = {for (final a in accounts) a.id!: a};
     _merchantMap = {for (final m in merchants) m.id!: m};
     final transactions = await ref.read(transactionRepositoryProvider).getFiltered(
-          month: _filterMonth, year: _filterYear, transactionType: _transactionType,
+          month: _filterMonth, year: _filterYear, transactionType: _filterType,
+          nature: _nature,
           categoryId: _filterCategoryId, accountId: _filterAccountId, merchantId: _filterMerchantId,
           orderBy: _filterSort,
         );
@@ -136,6 +138,7 @@ class _TransactionsScreenState extends ConsumerState<TransactionsScreen> {
 
   Future<void> _editTransaction(Transaction txn) async {
     String type = txn.transactionType;
+    String nature = txn.nature;
     final amountController = TextEditingController(text: txn.amount.toStringAsFixed(2));
     final formKey = GlobalKey<FormState>();
 
@@ -152,13 +155,24 @@ class _TransactionsScreenState extends ConsumerState<TransactionsScreen> {
                 children: [
                   DropdownButtonFormField<String>(
                     initialValue: type,
-                    decoration: const InputDecoration(labelText: 'Type'),
+                    decoration: const InputDecoration(labelText: 'Physical Type'),
                     items: const [
-                      DropdownMenuItem(value: 'DEBIT', child: Text('Expense (Debit)')),
-                      DropdownMenuItem(value: 'CREDIT', child: Text('Income (Credit)')),
-                      DropdownMenuItem(value: 'TRANSFER', child: Text('Transfer')),
+                      DropdownMenuItem(value: 'DEBIT', child: Text('Debit (Out)')),
+                      DropdownMenuItem(value: 'CREDIT', child: Text('Credit (In)')),
                     ],
                     onChanged: (v) => setDialogState(() => type = v!),
+                  ),
+                  const SizedBox(height: 16),
+                  DropdownButtonFormField<String>(
+                    initialValue: nature,
+                    decoration: const InputDecoration(labelText: 'Nature'),
+                    items: const [
+                      DropdownMenuItem(value: 'EXPENSE', child: Text('Expense')),
+                      DropdownMenuItem(value: 'INCOME', child: Text('Income')),
+                      DropdownMenuItem(value: 'TRANSFER', child: Text('Transfer')),
+                      DropdownMenuItem(value: 'INVESTMENT', child: Text('Investment')),
+                    ],
+                    onChanged: (v) => setDialogState(() => nature = v!),
                   ),
                   const SizedBox(height: 16),
                   TextFormField(
@@ -192,10 +206,11 @@ class _TransactionsScreenState extends ConsumerState<TransactionsScreen> {
 
     if (saved == true) {
       final newAmount = double.parse(amountController.text);
-      if (newAmount != txn.amount || type != txn.transactionType || (!txn.labeled && txn.isAutoLabeled)) {
+      if (newAmount != txn.amount || type != txn.transactionType || nature != txn.nature || (!txn.labeled && txn.isAutoLabeled)) {
         final updatedTxn = txn.copyWith(
           amount: newAmount,
           transactionType: type,
+          nature: nature,
           labeled: true,
           isAutoLabeled: false,
           updatedTime: DateFormat('yyyy-MM-dd HH:mm:ss').format(DateTime.now()),
@@ -261,16 +276,21 @@ class _TransactionsScreenState extends ConsumerState<TransactionsScreen> {
     final account = txn.accountId != null ? _accountMap[txn.accountId] : null;
     final merchant = txn.merchantId != null ? _merchantMap[txn.merchantId] : null;
     final isDebit = txn.transactionType == 'DEBIT';
-    final isTransfer = txn.transactionType == 'TRANSFER';
+    final isTransfer = txn.nature == 'TRANSFERS';
+    final isInvestment = txn.nature == 'INVESTMENTS';
 
-    final logoColor = isTransfer
-        ? (cat == null || cat.categoryType == 'INCOME' ? AppColors.income : AppColors.expense)
-        : (isDebit ? AppColors.expense : AppColors.income);
+    final logoColor = isInvestment
+        ? AppColors.primary
+        : (isTransfer
+            ? (isDebit ? AppColors.expense : AppColors.income)
+            : (isDebit ? AppColors.expense : AppColors.income));
 
     final amountColor = logoColor;
 
     final Widget logoWidget;
-    if (isTransfer) {
+    if (isInvestment) {
+      logoWidget = const Icon(Icons.pie_chart_outline, color: AppColors.primary);
+    } else if (isTransfer) {
       logoWidget = Icon(Icons.swap_horiz_rounded, color: logoColor);
     } else if (cat != null) {
       logoWidget = Icon(IconHelper.getIcon(cat.icon), color: ColorHelper.fromHex(cat.iconColor));
@@ -306,7 +326,7 @@ class _TransactionsScreenState extends ConsumerState<TransactionsScreen> {
           mainAxisSize: MainAxisSize.min,
           children: [
             Text(
-              '${isTransfer ? '' : (isDebit ? '-' : '+')}₹${txn.amount.toStringAsFixed(2)}',
+              '${isInvestment || isTransfer ? '' : (isDebit ? '-' : '+')}₹${txn.amount.toStringAsFixed(2)}',
               style: TextStyle(fontWeight: FontWeight.bold, color: amountColor),
             ),
             const SizedBox(width: 4),
@@ -393,14 +413,25 @@ class _TransactionsScreenState extends ConsumerState<TransactionsScreen> {
           const SizedBox(width: 8),
           _buildDropdown<String>(
             context: context,
-            hint: 'Type',
-            value: _transactionType,
+            hint: 'Physical Type',
+            value: _filterType,
             items: const [
               DropdownMenuItem(value: 'DEBIT', child: Text('Debit')),
               DropdownMenuItem(value: 'CREDIT', child: Text('Credit')),
-              DropdownMenuItem(value: 'TRANSFER', child: Text('Transfer')),
             ],
-            onChanged: (v) { setState(() => _transactionType = v); _loadData(); },
+            onChanged: (v) { setState(() => _filterType = v); _loadData(); },
+          ),
+          const SizedBox(width: 8),
+          _buildDropdown<String>(
+            context: context,
+            hint: 'Nature',
+            value: _nature,
+            items: const [
+              DropdownMenuItem(value: 'TRANSACTIONS', child: Text('Transactions')),
+              DropdownMenuItem(value: 'TRANSFERS', child: Text('Transfers')),
+              DropdownMenuItem(value: 'INVESTMENTS', child: Text('Investments')),
+            ],
+            onChanged: (v) { setState(() => _nature = v); _loadData(); },
           ),
         ],
       ),

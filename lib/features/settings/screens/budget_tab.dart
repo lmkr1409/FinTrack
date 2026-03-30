@@ -110,7 +110,9 @@ class _BudgetTabState extends ConsumerState<BudgetTab> {
     final isMonthly = _period == _BudgetPeriod.monthly;
     final inputs = isMonthly ? _budgetInputs : _annualBudgetInputs;
     
-    for (final cat in _categories.where((c) => c.categoryType == 'EXPENSE')) {
+    for (final cat in _categories.where((c) =>
+        c.categoryType == 'TRANSACTIONS' &&
+        c.categoryName.toLowerCase() != 'income')) {
        total += double.tryParse(inputs[cat.id!] ?? '') ?? 0.0;
     }
     return total;
@@ -156,7 +158,9 @@ class _BudgetTabState extends ConsumerState<BudgetTab> {
     }
 
     // 2. Save Category Budgets
-    for (final cat in _categories.where((c) => c.categoryType == 'EXPENSE')) {
+    for (final cat in _categories.where((c) =>
+        c.categoryType == 'TRANSACTIONS' &&
+        c.categoryName.toLowerCase() != 'income')) {
       if (isMonthly) {
         final val = _budgetInputs[cat.id!] ?? '';
         final amount = double.tryParse(val) ?? 0.0;
@@ -271,6 +275,8 @@ class _BudgetTabState extends ConsumerState<BudgetTab> {
               onSelectionChanged: (s) {
                 setState(() {
                   _period = s.first;
+                  _budgetInputs.clear();
+                  _annualBudgetInputs.clear();
                 });
                 _loadData();
               },
@@ -285,6 +291,8 @@ class _BudgetTabState extends ConsumerState<BudgetTab> {
                     onMonthChanged: (newMonth) {
                       setState(() {
                         _selectedMonth = newMonth;
+                        _budgetInputs.clear();
+                        _annualBudgetInputs.clear();
                       });
                       _loadData(); // Re-populate for new month
                     },
@@ -312,6 +320,8 @@ class _BudgetTabState extends ConsumerState<BudgetTab> {
                     onYearChanged: (newYear) {
                       setState(() {
                         _selectedYear = newYear;
+                        _budgetInputs.clear();
+                        _annualBudgetInputs.clear();
                       });
                       _loadData(); // Re-populate for new year
                     },
@@ -345,8 +355,10 @@ class _BudgetTabState extends ConsumerState<BudgetTab> {
   }
 
   Widget _buildCategoriesList(ColorScheme cs, {required bool isExceeded}) {
-    const cType = 'EXPENSE';
-    final filteredCategories = _categories.where((c) => c.categoryType == cType).toList();
+    final filteredCategories = _categories.where((c) => 
+      c.categoryType == 'TRANSACTIONS' &&
+      c.categoryName.toLowerCase() != 'income'
+    ).toList();
     final isMonthly = _period == _BudgetPeriod.monthly;
 
     if (filteredCategories.isEmpty) {
@@ -380,6 +392,7 @@ class _BudgetTabState extends ConsumerState<BudgetTab> {
                 SizedBox(
                   width: 100,
                   child: _buildCompactBudgetInput(
+                    key: ValueKey('cat_${cat.id}_${isMonthly ? _selectedMonth.month : 0}_${isMonthly ? _selectedMonth.year : _selectedYear}_${_period.name}_$_loading'),
                     initialValue: isMonthly
                       ? (_budgetInputs[cat.id!] ?? '')
                       : (_annualBudgetInputs[cat.id!] ?? ''),
@@ -423,9 +436,13 @@ class _BudgetTabState extends ConsumerState<BudgetTab> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Text(
-                    isMonthly ? 'Total Monthly Budget' : 'Total Yearly Budget', 
-                    style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 14)
+                  Row(
+                    children: [
+                      Text(
+                        isMonthly ? 'Total Monthly Budget' : 'Total Yearly Budget', 
+                        style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 14)
+                      ),
+                    ],
                   ),
                   if (total > 0)
                     Text(
@@ -444,6 +461,7 @@ class _BudgetTabState extends ConsumerState<BudgetTab> {
             SizedBox(
               width: 100,
               child: _buildCompactBudgetInput(
+                key: ValueKey('global_${isMonthly ? _selectedMonth.month : 0}_${isMonthly ? _selectedMonth.year : _selectedYear}_${_period.name}_$_loading'),
                 initialValue: _globalBudgetInput,
                 isExceeded: isExceeded,
                 onChanged: (val) => setState(() => _globalBudgetInput = val),
@@ -457,6 +475,7 @@ class _BudgetTabState extends ConsumerState<BudgetTab> {
   }
 
   Widget _buildCompactBudgetInput({
+    Key? key,
     required String initialValue,
     required Function(String) onChanged,
     required ColorScheme cs,
@@ -464,6 +483,7 @@ class _BudgetTabState extends ConsumerState<BudgetTab> {
   }) {
     final color = isExceeded ? Colors.redAccent : Colors.white;
     return TextFormField(
+      key: key,
       initialValue: initialValue,
       keyboardType: TextInputType.number,
       textAlign: TextAlign.end,

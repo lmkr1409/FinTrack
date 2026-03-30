@@ -9,7 +9,7 @@ CREATE TABLE IF NOT EXISTS category (
 	icon TEXT,
 	icon_color TEXT,
 	priority INTEGER NOT NULL DEFAULT 99,
-	category_type TEXT NOT NULL DEFAULT 'EXPENSE'
+	category_type TEXT NOT NULL DEFAULT 'TRANSACTIONS'
 );
 
 CREATE TABLE IF NOT EXISTS sub_category (
@@ -140,6 +140,7 @@ CREATE TABLE IF NOT EXISTS transaction_rule (
 CREATE TABLE IF NOT EXISTS "transaction" (
 	transaction_id INTEGER PRIMARY KEY AUTOINCREMENT,
 	transaction_type TEXT NOT NULL,
+	nature TEXT NOT NULL DEFAULT 'TRANSACTIONS',
 	amount REAL NOT NULL,
 	transaction_date TEXT NOT NULL,
 	description TEXT,
