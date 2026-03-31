@@ -63,6 +63,110 @@ class DatabaseService {
     if (oldVersion < 3) {
       await db.execute('ALTER TABLE "transaction" ADD COLUMN goal_id INTEGER');
     }
+    if (oldVersion < 4) {
+      final newSenders = [
+        'SBIUPI', 'SBIN', 'ATMSBI', 'SBIOTR', 'SBIPAY',
+        'ICICIS', 'ICICIP', 'ICICIV', 'ICICIA',
+        'AXISPB', 'AXISCN', 'AXISRM',
+        'KOTAKM', 'KOTAKN',
+        'PNBBNK', 'PNBORG',
+        'BOBSMS', 'CANARA', 'IDFCBK', 'INDUSB', 'INDSBK', 'YESPBT', 'UBIINB', 'UBIRES',
+        'CBIINB', 'IDNBNK', 'FEDBNK', 'SIBTXT', 'RBLBNK', 'BNDHAN', 'IDBIBK', 'SCBBNK',
+        'CITIBK', 'HSBCBK', 'DBSBNK', 'KVBSMS'
+      ];
+      for (final sender in newSenders) {
+        await db.execute(
+          'INSERT OR IGNORE INTO transaction_rule (rule_type, pattern) VALUES (?, ?)',
+          ['BANK_SENDER', sender],
+        );
+      }
+    }
+    if (oldVersion < 5) {
+      final updates = {
+        'Groceries': {
+          'Fruits': '#FF5252',
+          'Dry Fruits': '#FB8C00',
+          'Vegetables': '#4CAF50',
+          'Dairy': '#03A9F4',
+          'Meat': '#795548',
+          'Milling': '#FDD835',
+        },
+        'Income': {
+          'Salary': '#2E7D32',
+          'Investment': '#00C853',
+        },
+        'Utilities': {
+          'Electricity': '#FFEB3B',
+          'Mobile Bill': '#EC407A',
+          'Internet Bill': '#5C6BC0',
+          'Gas Bill': '#FF7043',
+        },
+        'Transportation': {
+          'Petrol': '#FF9800',
+          'Bike Service': '#455A64',
+          'Commute': '#0288D1',
+        },
+        'Housing': {
+          'Rent': '#3F51B5',
+          'Maintenance': '#689F38',
+          'Repairs': '#F44336',
+        },
+        'Entertainment': {
+          'Movies': '#E91E63',
+          'Concerts': '#9C27B0',
+        },
+        'Healthcare': {
+          'Doctor': '#00BCD4',
+          'Medicine': '#E53935',
+        },
+        'Insurance': {
+          'Health Insurance': '#EF5350',
+          'Car Insurance': '#26A69A',
+          'Bike Insurance': '#FFA726',
+        },
+        'Education': {
+          'Books': '#5C6BC0',
+          'Courses': '#26A69A',
+        },
+        'Shopping': {
+          'Clothes': '#FF4081',
+          'Electronics': '#7E57C2',
+        },
+        'Food': {
+          'Office': '#A1887F',
+          'Breakfast': '#FFB300',
+          'Outside': '#FF5722',
+          'Restaurant': '#D84315',
+          'Snacks': '#FFCA28',
+        },
+        'Travel': {
+          'Tour': '#009688',
+          'Hotel': '#1976D2',
+        },
+        'Mutual Funds': {
+          'SIP': '#3F51B5',
+          'LumpSum': '#3949AB',
+        },
+        'Gifts & Donation': {
+          'Gift': '#EC407A',
+          'Donation': '#66BB6A',
+        },
+      };
+
+      for (var entry in updates.entries) {
+        final catName = entry.key;
+        for (var subEntry in entry.value.entries) {
+          final subName = subEntry.key;
+          final color = subEntry.value;
+          await db.execute('''
+            UPDATE sub_category 
+            SET icon_color = ? 
+            WHERE subcategory_name = ? 
+            AND category_id = (SELECT category_id FROM category WHERE category_name = ?)
+          ''', [color, subName, catName]);
+        }
+      }
+    }
   }
 
   /// Reads and executes the SQL schema/seed file from assets.

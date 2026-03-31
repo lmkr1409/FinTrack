@@ -17,6 +17,7 @@ import '../../../services/providers.dart';
 import '../../../core/utils/color_helper.dart';
 import '../../../core/widgets/autocomplete_field.dart';
 import 'package:sqflite/sqflite.dart' show ConflictAlgorithm;
+import 'transaction_split_dialog.dart';
 
 /// Bottom sheet dialog for labeling a transaction and creating rules.
 class LabelDialog extends ConsumerStatefulWidget {
@@ -208,6 +209,7 @@ class _LabelDialogState extends ConsumerState<LabelDialog> {
     setState(() => _saving = true);
     final nowStr = DateFormat('yyyy-MM-dd HH:mm:ss').format(DateTime.now());
 
+    // Explicitly include all fields to ensure NULLs are saved to the DB
     final fields = <String, dynamic>{
       'category_id': _categoryId,
       'subcategory_id': _subcategoryId,
@@ -223,15 +225,11 @@ class _LabelDialogState extends ConsumerState<LabelDialog> {
       'updated_time': nowStr,
     };
 
-
     // Add amount if it's a valid number
     final amount = double.tryParse(_amountStr);
     if (amount != null) {
       fields['amount'] = amount;
     }
-
-    // Remove null values
-    fields.removeWhere((_, v) => v == null);
 
     final repo = ref.read(transactionRepositoryProvider);
 
@@ -351,6 +349,31 @@ class _LabelDialogState extends ConsumerState<LabelDialog> {
       }
     } finally {
       if (mounted) setState(() => _saving = false);
+    }
+  }
+
+  void _openSplitDialog(BuildContext context) async {
+    final success = await showModalBottomSheet<bool>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) => Container(
+        decoration: BoxDecoration(
+          color: Theme.of(context).colorScheme.surface,
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+        ),
+        child: TransactionSplitDialog(
+          transaction: widget.transaction,
+          onSplitComplete: () {
+            // Success! The dialog itself will pop with 'true' result
+          },
+        ),
+      ),
+    );
+
+    if (success == true && mounted) {
+      Navigator.pop(context); // Close the LabelDialog itself
+      widget.onSaved(); // Refresh the list
     }
   }
 
@@ -477,6 +500,19 @@ class _LabelDialogState extends ConsumerState<LabelDialog> {
                                   txn.description ?? 'No description',
                                   style: const TextStyle(fontSize: 14),
                                 ),
+                                const SizedBox(height: 12),
+                                Center(
+                                  child: OutlinedButton.icon(
+                                    onPressed: () => _openSplitDialog(context),
+                                    icon: const Icon(Icons.call_split_rounded, size: 18),
+                                    label: const Text('Split Transaction'),
+                                    style: OutlinedButton.styleFrom(
+                                      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                                      side: const BorderSide(color: AppColors.primary),
+                                      foregroundColor: AppColors.primary,
+                                    ),
+                                  ),
+                                ),
                               ],
                             ),
                           ),
@@ -539,10 +575,15 @@ class _LabelDialogState extends ConsumerState<LabelDialog> {
                                   onSelectionChanged: (s) {
                                     setState(() {
                                       _nature = s.first;
-                                      // Clear category if nature changed
-                                      _categoryId = null;
-                                      _subcategoryId = null;
-                                      _subCategories = [];
+                                      if (_nature == 'TRANSFERS') {
+                                        // Clear all expense-related fields for transfers
+                                        _categoryId = null;
+                                        _subcategoryId = null;
+                                        _subCategories = [];
+                                        _merchantId = null;
+                                        _merchantKeywordCtrl.clear();
+                                        _purposeId = null;
+                                      }
                                     });
                                   },
                                 ),

@@ -8,53 +8,73 @@ class HelpScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: Colors.transparent, // Background handled by the drawer/main layout
       body: ListView(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 32),
         children: [
           const Text(
             'App Guide & Help',
             style: TextStyle(
-              fontSize: 28,
+              fontSize: 32,
               fontWeight: FontWeight.bold,
               color: Colors.white,
             ),
           ),
           const SizedBox(height: 8),
           const Text(
-            'Learn how to get the most out of FinTrack.',
-            style: TextStyle(color: AppColors.textSecondary, fontSize: 14),
+            'Master the features of FinTrack with this guide.',
+            style: TextStyle(color: AppColors.textSecondary, fontSize: 16),
           ),
-          const SizedBox(height: 24),
+          const SizedBox(height: 32),
+          
+          _buildHeader('Getting Started'),
+          const SizedBox(height: 16),
           
           _buildHelpSection(
             context,
             icon: Icons.sms_rounded,
-            title: 'Smart SMS Sync',
-            description: 'FinTrack automatically reads your banking SMS to track your spending in real-time. It looks for keywords like "debited", "credited", and transaction amounts to build your history.',
+            title: 'Bank Senders (SMS Sync)',
+            description: 'FinTrack tracks your spending by reading banking SMS. \n\n• The app looks for alphanumeric senders (like XX-ABCBNK).\n• If your bank\'s SMS aren\'t appearing, go to Labeling Rules > Transaction Rules and add a "Bank Sender" rule with your bank\'s ID.',
             color: AppColors.primary,
           ),
           
           _buildHelpSection(
             context,
-            icon: Icons.label_rounded,
-            title: 'Manual Labeling',
-            description: 'Initially, some transactions may be unlabeled. Tap on any unlabeled transaction in the "Transactions" tab to set its category, sub-category, and merchant. This helps the app understand your spending patterns.',
-            color: Colors.orange,
+            icon: Icons.account_balance_rounded,
+            title: 'Accounts & Cards',
+            description: 'Source tracking starts with your accounts.\n\n• Create your Bank Accounts first.\n• Link your Credit/Debit cards to these accounts. \n• This allows the app to group transactions based on the account or card mentioned in your SMS.',
+            color: Colors.blueAccent,
+          ),
+
+          const SizedBox(height: 24),
+          _buildHeader('Automation & Rules'),
+          const SizedBox(height: 16),
+          
+          _buildHelpSection(
+            context,
+            icon: Icons.settings_suggest_rounded,
+            title: 'Transaction Rules',
+            description: 'Teach the app how to identify the "How" of a payment.\n\n• Payment Method: Link keywords like "UPI" or "VISA" to a method.\n• Account/Card: Map "A/c XXXX" or "Card XX1234" to your created Accounts/Cards.\n• Transaction Type: Identify "Debited" as Expense and "Credited" as Income.',
+            color: Colors.purpleAccent,
           ),
           
           _buildHelpSection(
             context,
-            icon: Icons.psychology_rounded,
-            title: 'Automatic Rules',
-            description: 'Every time you label a transaction, FinTrack automatically learns and creates a "Rule". In the future, similar transactions will be categorized automatically without your intervention. You can manage these in the "Labeling Rules" section.',
-            color: Colors.purple,
+            icon: Icons.store_rounded,
+            title: 'Merchant Rules',
+            description: 'Teach the app how to identify the "Who" of a payment.\n\n• When you label a transaction for the first time, look for a unique Merchant Keyword (e.g., from a UPI ID).\n• Linking this keyword to a Merchant, Category, and Purpose creates a Rule.\n• Future transactions from the same merchant will be labeled automatically!',
+            color: Colors.orangeAccent,
           ),
+
+          const SizedBox(height: 24),
+          _buildHeader('Advanced Features'),
+          const SizedBox(height: 16),
           
           _buildHelpSection(
             context,
             icon: Icons.insights_rounded,
-            title: 'Powerful Insights',
-            description: 'The Insights tab provides a comprehensive view of your finances. You can see your spending trends over the last year, monitor your budgets, and see a breakdown of your top spending categories and merchants.',
+            title: 'Insights & Trends',
+            description: 'The Analytics tab provides a comprehensive view of your finances. Analyze your spending trends, monitor your budgets, and see a breakdown of your top categories and cards.',
             color: AppColors.income,
           ),
           
@@ -62,19 +82,34 @@ class HelpScreen extends StatelessWidget {
             context,
             icon: Icons.backup_rounded,
             title: 'Data Privacy & Backup',
-            description: 'Your data stays on your device. We never upload your financial information to any server. You can export your data to a JSON file for your own backups via the "Backup & Restore" screen.',
-            color: Colors.blue,
+            description: 'All your financial data stays on your device. You can export your data to a JSON file for your own backups via the "Backup & Restore" screen in Settings.',
+            color: AppColors.textMuted,
           ),
 
-          const SizedBox(height: 32),
+          const SizedBox(height: 48),
           const Center(
             child: Text(
-              'FinTrack v1.0.0',
-              style: TextStyle(color: AppColors.textMuted, fontSize: 12),
+              'FinTrack v1.1.0',
+              style: TextStyle(color: AppColors.textMuted, fontSize: 13, letterSpacing: 1.2),
             ),
           ),
-          const SizedBox(height: 16),
+          const SizedBox(height: 32),
         ],
+      ),
+    );
+  }
+
+  Widget _buildHeader(String title) {
+    return Padding(
+      padding: const EdgeInsets.only(left: 4),
+      child: Text(
+        title.toUpperCase(),
+        style: const TextStyle(
+          fontSize: 13,
+          fontWeight: FontWeight.w800,
+          color: AppColors.primary,
+          letterSpacing: 2.0,
+        ),
       ),
     );
   }
@@ -88,17 +123,18 @@ class HelpScreen extends StatelessWidget {
   }) {
     return GlassCard(
       margin: const EdgeInsets.only(bottom: 16),
-      padding: const EdgeInsets.all(20),
+      padding: const EdgeInsets.all(24),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Container(
             padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
-              color: color.withOpacity(0.15),
-              shape: BoxShape.circle,
+              color: color.withOpacity(0.1),
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: color.withOpacity(0.2)),
             ),
-            child: Icon(icon, color: color, size: 24),
+            child: Icon(icon, color: color, size: 28),
           ),
           const SizedBox(width: 20),
           Expanded(
@@ -110,16 +146,17 @@ class HelpScreen extends StatelessWidget {
                   style: const TextStyle(
                     fontWeight: FontWeight.bold,
                     color: AppColors.textPrimary,
-                    fontSize: 18,
+                    fontSize: 20,
                   ),
                 ),
-                const SizedBox(height: 8),
+                const SizedBox(height: 12),
                 Text(
                   description,
                   style: const TextStyle(
                     color: AppColors.textSecondary,
                     fontSize: 14,
-                    height: 1.5,
+                    height: 1.6,
+                    fontWeight: FontWeight.w400,
                   ),
                 ),
               ],
