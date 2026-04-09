@@ -183,3 +183,37 @@ CREATE TABLE IF NOT EXISTS "transaction" (
 	FOREIGN KEY (subcategory_id) REFERENCES sub_category(subcategory_id) ON DELETE SET NULL,
 	FOREIGN KEY (goal_id) REFERENCES investment_goal(goal_id) ON DELETE SET NULL
 );
+CREATE TABLE IF NOT EXISTS budget_framework (
+	framework_id INTEGER PRIMARY KEY AUTOINCREMENT,
+	name TEXT NOT NULL,
+	is_active INTEGER DEFAULT 0
+);
+
+CREATE TABLE IF NOT EXISTS budget_bucket (
+	bucket_id INTEGER PRIMARY KEY AUTOINCREMENT,
+	framework_id INTEGER NOT NULL,
+	name TEXT NOT NULL,
+	percentage REAL NOT NULL,
+	bucket_type TEXT NOT NULL,
+	icon TEXT,
+	icon_color TEXT,
+	FOREIGN KEY (framework_id) REFERENCES budget_framework(framework_id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS category_bucket_mapping (
+	category_id INTEGER NOT NULL,
+	framework_id INTEGER NOT NULL,
+	bucket_id INTEGER NOT NULL,
+	PRIMARY KEY (category_id, framework_id),
+	FOREIGN KEY (category_id) REFERENCES category(category_id) ON DELETE CASCADE,
+	FOREIGN KEY (framework_id) REFERENCES budget_framework(framework_id) ON DELETE CASCADE,
+	FOREIGN KEY (bucket_id) REFERENCES budget_bucket(bucket_id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS strategy_settings (
+	month INTEGER NOT NULL,
+	year INTEGER NOT NULL,
+	framework_id INTEGER,
+	salary_override REAL,
+	PRIMARY KEY (month, year)
+);

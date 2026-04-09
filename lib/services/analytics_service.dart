@@ -1,4 +1,6 @@
+import 'package:intl/intl.dart';
 import '../core/database/database_service.dart';
+import '../models/strategy_models.dart';
 
 /// Service providing analytics queries for dashboards, trends, and top-N reports.
 class AnalyticsService {
@@ -280,15 +282,14 @@ class AnalyticsService {
     };
   }
 
-  Future<List<Map<String, dynamic>>> budgetVsActual(int month, int year, {String categoryType = 'TRANSACTIONS'}) async {
+  Future<List<Map<String, dynamic>>> budgetVsActual(int month, int year, {List<String> categoryTypes = const ['TRANSACTIONS']}) async {
     final db = await _db.database;
     final start = '$year-${month.toString().padLeft(2, '0')}-01';
     final endMonth = month == 12 ? 1 : month + 1;
     final endYear = month == 12 ? year + 1 : year;
     final end = '$endYear-${endMonth.toString().padLeft(2, '0')}-01';
 
-    // Map 'EXPENSE' to 'TRANSACTIONS' for backward compatibility
-    final effectiveType = (categoryType == 'EXPENSE') ? 'TRANSACTIONS' : categoryType;
+    final placeholders = categoryTypes.map((_) => '?').join(', ');
 
     final result = await db.rawQuery('''
       SELECT 
@@ -300,8 +301,13 @@ class AnalyticsService {
         COALESCE(bm.budget_amount, 0) as budget_amount, -- Monthly
         COALESCE(ba.budget_amount, 0) as budget_amount_annual, -- Yearly
         COALESCE((
-          SELECT SUM(t.amount) FROM "transaction" t 
-          WHERE t.category_id = c.category_id AND t.nature = 'TRANSACTIONS' AND t.transaction_type = 'DEBIT'
+          SELECT SUM(CASE 
+            WHEN t.nature = 'TRANSACTIONS' AND t.transaction_type = 'DEBIT' THEN t.amount 
+            WHEN t.nature = 'INVESTMENTS' AND t.transaction_type = 'DEBIT' THEN t.amount
+            WHEN t.nature = 'INVESTMENTS' AND t.transaction_type = 'CREDIT' THEN -t.amount
+            ELSE 0 END) 
+          FROM "transaction" t 
+          WHERE t.category_id = c.category_id 
           AND t.transaction_date >= ? AND t.transaction_date < ?
         ), 0) as actual
       FROM category c
@@ -309,29 +315,42 @@ class AnalyticsService {
         AND bm.budget_frequency = 'MONTHLY' AND bm.month = ? AND bm.year = ?
       LEFT JOIN budget ba ON c.category_id = ba.category_id 
         AND ba.budget_frequency = 'ANNUAL' AND ba.year = ?
-      WHERE c.category_type = ?
-    ''', [start, end, month, year, year, effectiveType]);
+      WHERE c.category_type IN ($placeholders)
+    ''', [start, end, month, year, year, ...categoryTypes]);
 
     // Convert to mutable maps to add global budget info if needed
     final list = List<Map<String, dynamic>>.from(result.map((e) => Map<String, dynamic>.from(e)));
 
-    if (categoryType == 'TRANSACTIONS') {
+    // Ensure actual is not negative (especially for investments)
+    for (var item in list) {
+      if ((item['actual'] as num).toDouble() < 0) {
+        item['actual'] = 0.0;
+      }
+    }
+
+    if (categoryTypes.contains('TRANSACTIONS')) {
       // Add Global Budget as a special entry with category_id = null
       final globalBudget = await db.rawQuery(
         'SELECT budget_amount FROM budget_total WHERE budget_frequency = \'MONTHLY\' AND month = ? AND year = ?',
         [month, year]
       );
       if (globalBudget.isNotEmpty) {
-        // We calculate total actual expenses for the month
-        final totalActual = await db.rawQuery(
-          'SELECT SUM(amount) as total FROM "transaction" WHERE nature = \'TRANSACTIONS\' AND transaction_type = \'DEBIT\' AND transaction_date >= ? AND transaction_date < ?',
-          [start, end]
-        );
+        // We calculate total actual outflows (Expenses + Net Investments) for the month
+        final totalActual = await db.rawQuery('''
+          SELECT SUM(CASE 
+            WHEN nature = 'TRANSACTIONS' AND transaction_type = 'DEBIT' THEN amount 
+            WHEN nature = 'INVESTMENTS' AND transaction_type = 'DEBIT' THEN amount
+            WHEN nature = 'INVESTMENTS' AND transaction_type = 'CREDIT' THEN -amount
+            ELSE 0 END) as total 
+          FROM "transaction" 
+          WHERE transaction_date >= ? AND transaction_date < ?
+        ''', [start, end]);
+
         list.add({
           'category_id': null,
           'category_name': 'Total Budget',
           'budget_amount': (globalBudget.first['budget_amount'] as num).toDouble(),
-          'actual': (totalActual.first['total'] as num?)?.toDouble() ?? 0.0,
+          'actual': (totalActual.first['total'] as num?)?.toDouble().clamp(0, double.infinity) ?? 0.0,
           'category_type': 'TRANSACTIONS',
         });
       }
@@ -566,5 +585,82 @@ class AnalyticsService {
       'expenses': expenses,
       'investments': investments,
     };
+  }
+
+  // ─── Strategic Planner (Heuristics) ────────────────────
+
+  Future<List<BucketProgress>> getStrategyProgress(DateTime date) async {
+    final db = await _db.database;
+    final start = DateFormat('yyyy-MM-dd').format(DateTime(date.year, date.month, 1));
+    final end = DateFormat('yyyy-MM-dd').format(DateTime(date.year, date.month + 1, 0));
+
+    // 1. Get Active Framework
+    final frameworks = await db.query('budget_framework', where: 'is_active = 1');
+    if (frameworks.isEmpty) return [];
+    final framework = BudgetFramework.fromMap(frameworks.first);
+
+    // 2. Get Buckets
+    final buckets = await db.query('budget_bucket', where: 'framework_id = ?', whereArgs: [framework.id]);
+    final bucketModels = buckets.map((b) => BudgetBucket.fromMap(b)).toList();
+
+    // 3. Determine Baseline Salary
+    final baseline = await getStrategyBaseline(date);
+
+    // 4. Get Mappings
+    final mappings = await db.query('category_bucket_mapping', where: 'framework_id = ?', whereArgs: [framework.id]);
+    final catToBucket = <int, int>{};
+    for (final m in mappings) {
+      catToBucket[m['category_id'] as int] = m['bucket_id'] as int;
+    }
+
+    // 5. Calculate Actuals per Bucket
+    final bucketActuals = <int, double>{};
+    for (final bucket in bucketModels) bucketActuals[bucket.id!] = 0.0;
+
+    final catTotals = await db.rawQuery('''
+      SELECT 
+        category_id,
+        SUM(CASE 
+          WHEN nature = 'TRANSACTIONS' AND transaction_type = 'DEBIT' THEN amount
+          WHEN nature = 'INVESTMENTS' AND transaction_type = 'DEBIT' THEN amount
+          WHEN nature = 'INVESTMENTS' AND transaction_type = 'CREDIT' THEN -amount
+          ELSE 0 END) as total
+      FROM "transaction"
+      WHERE transaction_date >= ? AND transaction_date <= ?
+      GROUP BY category_id
+    ''', [start, end]);
+
+    for (final row in catTotals) {
+      final catId = row['category_id'] as int?;
+      if (catId != null && catToBucket.containsKey(catId)) {
+        final bucketId = catToBucket[catId]!;
+        bucketActuals[bucketId] = (bucketActuals[bucketId] ?? 0) + (row['total'] as num).toDouble();
+      }
+    }
+
+    // 6. Assemble Progress
+    return bucketModels.map((bucket) {
+      final target = baseline * (bucket.percentage / 100);
+      final actual = bucketActuals[bucket.id!] ?? 0.0;
+      return BucketProgress(
+        bucket: bucket,
+        targetAmount: target,
+        actualAmount: actual,
+      );
+    }).toList();
+  }
+
+  Future<double> getStrategyBaseline(DateTime date) async {
+    final db = await _db.database;
+    final settings = await db.query('strategy_settings', where: 'month = ? AND year = ?', whereArgs: [date.month, date.year]);
+    if (settings.isNotEmpty && settings.first['salary_override'] != null) {
+      return (settings.first['salary_override'] as num).toDouble();
+    }
+    
+    final prevMonth = DateTime(date.year, date.month - 1);
+    final prevStart = DateFormat('yyyy-MM-dd').format(DateTime(prevMonth.year, prevMonth.month, 1));
+    final prevEnd = DateFormat('yyyy-MM-dd').format(DateTime(prevMonth.year, prevMonth.month + 1, 0));
+    final prevIncome = await getIncomeAllocation(prevStart, prevEnd);
+    return prevIncome['income'] ?? 0.0;
   }
 }

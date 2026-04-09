@@ -3,8 +3,7 @@ import 'package:flutter/material.dart';
 import '../../../features/categories/screens/categories_tab.dart';
 import 'accounts_payments_tab.dart';
 import 'planner_settings_tab.dart';
-import 'purpose_source_tab.dart';
-import 'merchants_tab.dart';
+import 'entities_tab.dart';
 
 /// Configuration section with a 5-tab Bottom Navigation Bar.
 class ConfigurationScreen extends StatefulWidget {
@@ -21,8 +20,7 @@ class _ConfigurationScreenState extends State<ConfigurationScreen> {
     CategoriesTab(),
     PlannerSettingsTab(),
     AccountsPaymentsTab(),
-    PurposeSourceTab(),
-    MerchantsTab(),
+    EntitiesTab(),
   ];
 
   @override
@@ -53,12 +51,7 @@ class _ConfigurationScreenState extends State<ConfigurationScreen> {
           NavigationDestination(
             icon: Icon(Icons.bookmarks_outlined),
             selectedIcon: Icon(Icons.bookmarks_rounded),
-            label: 'Tags',
-          ),
-          NavigationDestination(
-            icon: Icon(Icons.store_outlined),
-            selectedIcon: Icon(Icons.store_rounded),
-            label: 'Merchants',
+            label: 'Entities',
           ),
         ],
       ),

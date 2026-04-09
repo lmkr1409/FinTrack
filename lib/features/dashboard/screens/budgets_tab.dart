@@ -2,16 +2,17 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:intl/intl.dart';
 
 import '../../../core/theme/app_colors.dart';
 import '../../../services/analytics_service.dart';
 import '../../../services/sms_listener_service.dart';
 import '../../../widgets/glass_card.dart';
-import '../../../widgets/month_swiper.dart';
 
 /// Budgets tab — budget vs actual with glassmorphic cards and themed progress bars.
 class BudgetsTab extends StatefulWidget {
-  const BudgetsTab({super.key});
+  final DateTime selectedMonth;
+  const BudgetsTab({super.key, required this.selectedMonth});
 
   @override
   State<BudgetsTab> createState() => _BudgetsTabState();
@@ -25,12 +26,18 @@ class _BudgetsTabState extends State<BudgetsTab> {
   String _sortMode = 'percent';
   bool _sortAscending = false;
 
-  DateTime _selectedMonth = DateTime(DateTime.now().year, DateTime.now().month);
-
   @override
   void initState() {
     super.initState();
     _loadData();
+  }
+
+  @override
+  void didUpdateWidget(BudgetsTab oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.selectedMonth != widget.selectedMonth) {
+      _loadData();
+    }
   }
 
   Future<void> _handleRefresh() async {
@@ -39,29 +46,28 @@ class _BudgetsTabState extends State<BudgetsTab> {
     await _loadData(showLoading: false);
   }
 
+  Map<String, double>? _incomeData;
+
   Future<void> _loadData({bool showLoading = false}) async {
     if (showLoading) setState(() => _loading = true);
 
-    final data = await _analytics.budgetVsActual(_selectedMonth.month, _selectedMonth.year, categoryType: 'TRANSACTIONS');
+    final startStr = DateFormat('yyyy-MM-dd').format(DateTime(widget.selectedMonth.year, widget.selectedMonth.month, 1));
+    final endStr = DateFormat('yyyy-MM-dd').format(DateTime(widget.selectedMonth.year, widget.selectedMonth.month + 1, 0));
+
+    final data = await _analytics.budgetVsActual(widget.selectedMonth.month, widget.selectedMonth.year, categoryTypes: ['TRANSACTIONS', 'INVESTMENTS']);
+    final income = await _analytics.getIncomeAllocation(startStr, endStr);
+    
     if (!mounted) return;
     setState(() {
       _budgets = data.where((b) => b['category_name']?.toString().toLowerCase() != 'income').toList();
+      _incomeData = income;
       _loading = false;
     });
   }
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      body: MonthSwiper(
-        currentMonth: _selectedMonth,
-        onMonthChanged: (newMonth) {
-          setState(() => _selectedMonth = newMonth);
-          _loadData();
-        },
-        child: _buildContent(),
-      ),
-    );
+    return _buildContent();
   }
 
   Widget _buildContent() {
@@ -163,11 +169,30 @@ class _BudgetsTabState extends State<BudgetsTab> {
                   child: Column(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      Text(
-                        catName,
-                        style: const TextStyle(fontWeight: FontWeight.w600, color: AppColors.textPrimary),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Flexible(
+                            child: Text(
+                              catName,
+                              style: const TextStyle(fontWeight: FontWeight.w600, color: AppColors.textPrimary),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                          if (b['category_type'] == 'INVESTMENTS') ...[
+                            const SizedBox(width: 4),
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+                              decoration: BoxDecoration(
+                                color: Colors.amberAccent.withOpacity(0.2),
+                                borderRadius: BorderRadius.circular(4),
+                                border: Border.all(color: Colors.amberAccent.withOpacity(0.5), width: 0.5),
+                              ),
+                              child: const Text('INV', style: TextStyle(fontSize: 8, color: Colors.amberAccent, fontWeight: FontWeight.bold)),
+                            ),
+                          ],
+                        ],
                       ),
                       const SizedBox(height: 12),
                       _DoubleRingProgress(
@@ -244,10 +269,14 @@ class _BudgetsTabState extends State<BudgetsTab> {
     final globalEntry = _budgets.where((b) => b['category_id'] == null).firstOrNull;
     if (globalEntry == null) return const SizedBox.shrink();
 
-    final budget = (globalEntry['budget_amount'] as num).toDouble();
+    final budgeted = (globalEntry['budget_amount'] as num).toDouble();
     final actual = (globalEntry['actual'] as num).toDouble();
-    final progress = budget > 0 ? (actual / budget).clamp(0, 1).toDouble() : 0.0;
-    final isExceeded = actual > budget;
+    final income = _incomeData?['income'] ?? 0.0;
+    
+    // In zero-based budgeting, we want budgeted to match income.
+    final remainingToAllocate = income - budgeted;
+    final progress = budgeted > 0 ? (actual / budgeted).clamp(0, 1).toDouble() : 0.0;
+    final isExceeded = actual > budgeted;
 
     return GlassCard(
       margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
@@ -260,8 +289,34 @@ class _BudgetsTabState extends State<BudgetsTab> {
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                const Text('Total Monthly Budget', style: TextStyle(fontWeight: FontWeight.bold, color: AppColors.textPrimary)),
-                Text('₹${actual.toStringAsFixed(0)} / ₹${budget.toStringAsFixed(0)}', style: const TextStyle(fontWeight: FontWeight.bold)),
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text('Total Budget Allocation', style: TextStyle(fontWeight: FontWeight.bold, color: AppColors.textPrimary)),
+                    Text(
+                      'Income: ₹${income.toStringAsFixed(0)}',
+                      style: const TextStyle(fontSize: 11, color: AppColors.textMuted),
+                    ),
+                  ],
+                ),
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    Text('₹${actual.toStringAsFixed(0)} / ₹${budgeted.toStringAsFixed(0)}', style: const TextStyle(fontWeight: FontWeight.bold)),
+                    Text(
+                      remainingToAllocate == 0 
+                        ? 'Fully Allocated' 
+                        : remainingToAllocate > 0 
+                          ? '₹${remainingToAllocate.toStringAsFixed(0)} Left to Allocate'
+                          : 'Over-allocated by ₹${(-remainingToAllocate).toStringAsFixed(0)}',
+                      style: TextStyle(
+                        fontSize: 10, 
+                        color: remainingToAllocate >= 0 ? Colors.greenAccent : AppColors.expense,
+                        fontWeight: FontWeight.w600
+                      ),
+                    ),
+                  ],
+                ),
               ],
             ),
             const SizedBox(height: 12),
@@ -279,7 +334,7 @@ class _BudgetsTabState extends State<BudgetsTab> {
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 Text(
-                  isExceeded ? 'Exceeded by ₹${(actual - budget).toStringAsFixed(0)}' : '₹${(budget - actual).toStringAsFixed(0)} remaining',
+                  isExceeded ? 'Exceeded by ₹${(actual - budgeted).toStringAsFixed(0)}' : '₹${(budgeted - actual).toStringAsFixed(0)} remaining',
                   style: TextStyle(color: isExceeded ? AppColors.expense : Colors.greenAccent, fontSize: 12, fontWeight: FontWeight.w600),
                 ),
                 Text('${(progress * 100).toStringAsFixed(0)}%', style: TextStyle(color: isExceeded ? AppColors.expense : Colors.greenAccent, fontSize: 12)),

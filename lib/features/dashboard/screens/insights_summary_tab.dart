@@ -41,7 +41,7 @@ class _InsightsSummaryTabState extends State<InsightsSummaryTab> {
     final totalExpense = await _analytics.totalByNatureAndType('TRANSACTIONS', 'DEBIT', start, end);
     final totalIncome = await _analytics.totalByNatureAndType('TRANSACTIONS', 'CREDIT', start, end);
     final topCats = await _analytics.topCategories(start, end, limit: 3);
-    final rawBudgets = await _analytics.budgetVsActual(_selectedMonth.month, _selectedMonth.year, categoryType: 'TRANSACTIONS');
+    final rawBudgets = await _analytics.budgetVsActual(_selectedMonth.month, _selectedMonth.year, categoryTypes: ['TRANSACTIONS']);
     final budgets = rawBudgets.where((b) => b['category_name']?.toString().toLowerCase() != 'income').toList();
 
     if (totalIncome > 0) {

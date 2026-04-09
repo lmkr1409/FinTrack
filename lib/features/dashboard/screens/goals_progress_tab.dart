@@ -5,10 +5,10 @@ import '../../../core/utils/color_helper.dart';
 import '../../../core/utils/icon_helper.dart';
 import '../../../services/analytics_service.dart';
 import '../../../widgets/glass_card.dart';
-import '../../../widgets/month_swiper.dart';
 
 class GoalsProgressTab extends StatefulWidget {
-  const GoalsProgressTab({super.key});
+  final DateTime selectedMonth;
+  const GoalsProgressTab({super.key, required this.selectedMonth});
 
   @override
   State<GoalsProgressTab> createState() => _GoalsProgressTabState();
@@ -19,19 +19,25 @@ class _GoalsProgressTabState extends State<GoalsProgressTab> {
   bool _loading = true;
   List<Map<String, dynamic>> _goalsData = [];
 
-  DateTime _selectedMonth = DateTime(DateTime.now().year, DateTime.now().month);
-
   @override
   void initState() {
     super.initState();
     _loadData();
   }
 
+  @override
+  void didUpdateWidget(GoalsProgressTab oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.selectedMonth != widget.selectedMonth) {
+      _loadData();
+    }
+  }
+
   Future<void> _loadData() async {
     if (!mounted) return;
     setState(() => _loading = true);
 
-    final data = await _analytics.getGoalProgress(_selectedMonth.month, _selectedMonth.year);
+    final data = await _analytics.getGoalProgress(widget.selectedMonth.month, widget.selectedMonth.year);
     
     if (!mounted) return;
     setState(() {
@@ -42,16 +48,7 @@ class _GoalsProgressTabState extends State<GoalsProgressTab> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      body: MonthSwiper(
-        currentMonth: _selectedMonth,
-        onMonthChanged: (newMonth) {
-          setState(() => _selectedMonth = newMonth);
-          _loadData();
-        },
-        child: _buildContent(),
-      ),
-    );
+    return _buildContent();
   }
 
   Widget _buildContent() {

@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 
 import 'budgets_tab.dart';
 import 'goals_progress_tab.dart';
+import 'strategy_tab.dart';
+import '../../../widgets/month_swiper.dart';
 
 class PlannerTab extends StatefulWidget {
   const PlannerTab({super.key});
@@ -12,6 +14,7 @@ class PlannerTab extends StatefulWidget {
 
 class _PlannerTabState extends State<PlannerTab> {
   int _selectedIndex = 0;
+  DateTime _selectedMonth = DateTime(DateTime.now().year, DateTime.now().month);
 
   @override
   Widget build(BuildContext context) {
@@ -23,8 +26,9 @@ class _PlannerTabState extends State<PlannerTab> {
               padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
               child: SegmentedButton<int>(
                 segments: const [
-                  ButtonSegment(value: 0, label: Text('Expenses'), icon: Icon(Icons.money_off_csred_rounded)),
-                  ButtonSegment(value: 1, label: Text('Goals'), icon: Icon(Icons.star_rounded)),
+                  ButtonSegment(value: 0, label: Text('Strategy'), icon: Icon(Icons.insights_rounded)),
+                  ButtonSegment(value: 1, label: Text('Monthly Budget'), icon: Icon(Icons.account_balance_wallet_rounded)),
+                  ButtonSegment(value: 2, label: Text('Goals'), icon: Icon(Icons.star_rounded)),
                 ],
                 selected: {_selectedIndex},
                 onSelectionChanged: (set) {
@@ -33,16 +37,33 @@ class _PlannerTabState extends State<PlannerTab> {
               ),
             ),
             Expanded(
-              child: AnimatedSwitcher(
-                duration: const Duration(milliseconds: 200),
-                child: _selectedIndex == 0 
-                  ? const BudgetsTab(key: ValueKey('budget')) 
-                  : const GoalsProgressTab(key: ValueKey('goal')),
+              child: MonthSwiper(
+                currentMonth: _selectedMonth,
+                onMonthChanged: (newMonth) {
+                  setState(() => _selectedMonth = newMonth);
+                },
+                child: AnimatedSwitcher(
+                  duration: const Duration(milliseconds: 200),
+                  child: _buildSelectedTab(),
+                ),
               ),
             ),
           ],
         ),
       ),
     );
+  }
+
+  Widget _buildSelectedTab() {
+    switch (_selectedIndex) {
+      case 0:
+        return StrategyTab(key: const ValueKey('strategy'), selectedMonth: _selectedMonth);
+      case 1:
+        return BudgetsTab(key: const ValueKey('budget'), selectedMonth: _selectedMonth);
+      case 2:
+        return GoalsProgressTab(key: const ValueKey('goal'), selectedMonth: _selectedMonth);
+      default:
+        return const SizedBox.shrink();
+    }
   }
 }

@@ -39,6 +39,8 @@ class _BudgetTabState extends ConsumerState<BudgetTab> {
   final Map<int, String> _annualBudgetInputs = {};
   String _globalBudgetInput = '';
 
+  Map<String, double>? _incomeData;
+
   @override
   void initState() {
     super.initState();
@@ -63,9 +65,15 @@ class _BudgetTabState extends ConsumerState<BudgetTab> {
 
     _populateLocalInputs(budgets);
 
+    // Fetch income for reference
+    final startStr = DateFormat('yyyy-MM-dd').format(DateTime(_selectedMonth.year, _selectedMonth.month, 1));
+    final endStr = DateFormat('yyyy-MM-dd').format(DateTime(_selectedMonth.year, _selectedMonth.month + 1, 0));
+    final income = await ref.read(analyticsServiceProvider).getIncomeAllocation(startStr, endStr);
+
     setState(() {
       _budgets = budgets;
       _categories = categories;
+      _incomeData = income;
       _totalBudgetAmount = activePeriodTotal?.budgetAmount ?? 0;
       _totalBudgetId = activePeriodTotal?.id;
       _globalBudgetInput = _totalBudgetAmount > 0 ? _totalBudgetAmount.toStringAsFixed(0) : '';
@@ -111,7 +119,7 @@ class _BudgetTabState extends ConsumerState<BudgetTab> {
     final inputs = isMonthly ? _budgetInputs : _annualBudgetInputs;
     
     for (final cat in _categories.where((c) =>
-        c.categoryType == 'TRANSACTIONS' &&
+        (c.categoryType == 'TRANSACTIONS' || c.categoryType == 'INVESTMENTS') &&
         c.categoryName.toLowerCase() != 'income')) {
        total += double.tryParse(inputs[cat.id!] ?? '') ?? 0.0;
     }
@@ -159,7 +167,7 @@ class _BudgetTabState extends ConsumerState<BudgetTab> {
 
     // 2. Save Category Budgets
     for (final cat in _categories.where((c) =>
-        c.categoryType == 'TRANSACTIONS' &&
+        (c.categoryType == 'TRANSACTIONS' || c.categoryType == 'INVESTMENTS') &&
         c.categoryName.toLowerCase() != 'income')) {
       if (isMonthly) {
         final val = _budgetInputs[cat.id!] ?? '';
@@ -356,7 +364,7 @@ class _BudgetTabState extends ConsumerState<BudgetTab> {
 
   Widget _buildCategoriesList(ColorScheme cs, {required bool isExceeded}) {
     final filteredCategories = _categories.where((c) => 
-      c.categoryType == 'TRANSACTIONS' &&
+      (c.categoryType == 'TRANSACTIONS' || c.categoryType == 'INVESTMENTS') &&
       c.categoryName.toLowerCase() != 'income'
     ).toList();
     final isMonthly = _period == _BudgetPeriod.monthly;
@@ -419,6 +427,7 @@ class _BudgetTabState extends ConsumerState<BudgetTab> {
   Widget _buildGlobalBudgetCard(ColorScheme cs) {
     final planned = _currentPlannedSum;
     final total = double.tryParse(_globalBudgetInput) ?? 0.0;
+    final income = _incomeData?['income'] ?? 0.0;
     final isExceeded = total > 0 && planned > total;
     final isMonthly = _period == _BudgetPeriod.monthly;
 
@@ -444,9 +453,9 @@ class _BudgetTabState extends ConsumerState<BudgetTab> {
                       ),
                     ],
                   ),
-                  if (total > 0)
+                  if (total > 0 || income > 0)
                     Text(
-                      'Planned: ₹${planned.toStringAsFixed(0)} | ${isExceeded ? 'Exceeded' : '₹${(total - planned).toStringAsFixed(0)} left'}',
+                      'Income: ₹${income.toStringAsFixed(0)} | Allocated: ₹${planned.toStringAsFixed(0)} | ${isExceeded ? 'Exceeded' : '₹${(total - planned).toStringAsFixed(0)} left'}',
                       style: TextStyle(color: isExceeded ? Colors.redAccent : Colors.white60, fontSize: 11),
                     ),
                 ],

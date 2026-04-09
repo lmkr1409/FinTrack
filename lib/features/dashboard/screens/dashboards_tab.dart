@@ -219,7 +219,7 @@ class _DashboardsTabState extends State<DashboardsTab> {
             mainAxisSpacing: 8,
             shrinkWrap: true,
             physics: const NeverScrollableScrollPhysics(),
-            childAspectRatio: 1.5,
+            childAspectRatio: 1.8,
             children: [
               _MiniInsightCard(
                 label: 'Total Expense',
@@ -573,7 +573,7 @@ class _MiniInsightCard extends StatelessWidget {
   Widget build(BuildContext context) {
     return GlassCard(
       margin: EdgeInsets.zero,
-      padding: const EdgeInsets.all(12),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         mainAxisAlignment: MainAxisAlignment.center,
@@ -581,7 +581,7 @@ class _MiniInsightCard extends StatelessWidget {
           Row(
             children: [
               Icon(icon, color: color, size: 16),
-              const SizedBox(width: 8),
+              const SizedBox(width: 6),
               Expanded(
                 child: Text(
                   label,
@@ -595,7 +595,7 @@ class _MiniInsightCard extends StatelessWidget {
               ),
             ],
           ),
-          const SizedBox(height: 6),
+          const SizedBox(height: 4),
           Text(
             value,
             style: TextStyle(

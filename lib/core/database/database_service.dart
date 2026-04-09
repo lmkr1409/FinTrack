@@ -167,6 +167,101 @@ class DatabaseService {
         }
       }
     }
+
+    if (oldVersion < 7) {
+      await db.execute('''
+        CREATE TABLE IF NOT EXISTS budget_framework (
+          framework_id INTEGER PRIMARY KEY AUTOINCREMENT,
+          name TEXT NOT NULL,
+          is_active INTEGER DEFAULT 0
+        )
+      ''');
+
+      await db.execute('''
+        CREATE TABLE IF NOT EXISTS budget_bucket (
+          bucket_id INTEGER PRIMARY KEY AUTOINCREMENT,
+          framework_id INTEGER NOT NULL,
+          name TEXT NOT NULL,
+          percentage REAL NOT NULL,
+          bucket_type TEXT NOT NULL,
+          icon TEXT,
+          icon_color TEXT,
+          FOREIGN KEY (framework_id) REFERENCES budget_framework(framework_id) ON DELETE CASCADE
+        )
+      ''');
+
+      await db.execute('''
+        CREATE TABLE IF NOT EXISTS category_bucket_mapping (
+          category_id INTEGER NOT NULL,
+          framework_id INTEGER NOT NULL,
+          bucket_id INTEGER NOT NULL,
+          PRIMARY KEY (category_id, framework_id),
+          FOREIGN KEY (category_id) REFERENCES category(category_id) ON DELETE CASCADE,
+          FOREIGN KEY (framework_id) REFERENCES budget_framework(framework_id) ON DELETE CASCADE,
+          FOREIGN KEY (bucket_id) REFERENCES budget_bucket(bucket_id) ON DELETE CASCADE
+        )
+      ''');
+
+      await db.execute('''
+        CREATE TABLE IF NOT EXISTS strategy_settings (
+          month INTEGER NOT NULL,
+          year INTEGER NOT NULL,
+          framework_id INTEGER,
+          salary_override REAL,
+          PRIMARY KEY (month, year)
+        )
+      ''');
+
+      final f503020Id = await db.insert('budget_framework', {'name': '50/30/20 Rule', 'is_active': 1});
+      final f50251510Id = await db.insert('budget_framework', {'name': '50/25/15/10 Rule', 'is_active': 0});
+
+      await db.insert('budget_bucket', {
+        'framework_id': f503020Id, 'name': 'Essentials', 'percentage': 50.0, 'bucket_type': 'SPENT', 'icon': 'fact_check_rounded', 'icon_color': '#2196F3'
+      });
+      await db.insert('budget_bucket', {
+        'framework_id': f503020Id, 'name': 'Wants', 'percentage': 30.0, 'bucket_type': 'SPENT', 'icon': 'shopping_bag_rounded', 'icon_color': '#E91E63'
+      });
+      await db.insert('budget_bucket', {
+        'framework_id': f503020Id, 'name': 'Savings & Investments', 'percentage': 20.0, 'bucket_type': 'SAVED', 'icon': 'trending_up_rounded', 'icon_color': '#4CAF50'
+      });
+
+      await db.insert('budget_bucket', {
+        'framework_id': f50251510Id, 'name': 'Essentials', 'percentage': 50.0, 'bucket_type': 'SPENT', 'icon': 'fact_check_rounded', 'icon_color': '#2196F3'
+      });
+      await db.insert('budget_bucket', {
+        'framework_id': f50251510Id, 'name': 'Growth', 'percentage': 25.0, 'bucket_type': 'SAVED', 'icon': 'rocket_launch_rounded', 'icon_color': '#4CAF50'
+      });
+      await db.insert('budget_bucket', {
+        'framework_id': f50251510Id, 'name': 'Stability', 'percentage': 15.0, 'bucket_type': 'SAVED', 'icon': 'shield_rounded', 'icon_color': '#00BCD4'
+      });
+      await db.insert('budget_bucket', {
+        'framework_id': f50251510Id, 'name': 'Rewards', 'percentage': 10.0, 'bucket_type': 'SPENT', 'icon': 'card_giftcard_rounded', 'icon_color': '#FF9800'
+      });
+    }
+
+    if (oldVersion < 8) {
+      final f702010Id = await db.insert('budget_framework', {'name': '70/20/10 Rule', 'is_active': 0});
+      final f8020Id = await db.insert('budget_framework', {'name': '80/20 Rule', 'is_active': 0});
+
+      // 70/20/10 Buckets
+      await db.insert('budget_bucket', {
+        'framework_id': f702010Id, 'name': 'Living Expenses', 'percentage': 70.0, 'bucket_type': 'SPENT', 'icon': 'home_rounded', 'icon_color': '#FF9800'
+      });
+      await db.insert('budget_bucket', {
+        'framework_id': f702010Id, 'name': 'Savings & Investments', 'percentage': 20.0, 'bucket_type': 'SAVED', 'icon': 'trending_up_rounded', 'icon_color': '#4CAF50'
+      });
+      await db.insert('budget_bucket', {
+        'framework_id': f702010Id, 'name': 'Debt & Giving', 'percentage': 10.0, 'bucket_type': 'SPENT', 'icon': 'volunteer_activism_rounded', 'icon_color': '#9C27B0'
+      });
+
+      // 80/20 Buckets
+      await db.insert('budget_bucket', {
+        'framework_id': f8020Id, 'name': 'Everyday Expenses', 'percentage': 80.0, 'bucket_type': 'SPENT', 'icon': 'shopping_bag_rounded', 'icon_color': '#2196F3'
+      });
+      await db.insert('budget_bucket', {
+        'framework_id': f8020Id, 'name': 'Savings', 'percentage': 20.0, 'bucket_type': 'SAVED', 'icon': 'savings_rounded', 'icon_color': '#4CAF50'
+      });
+    }
   }
 
   /// Reads and executes the SQL schema/seed file from assets.
