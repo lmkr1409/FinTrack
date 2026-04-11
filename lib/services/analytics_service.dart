@@ -1,4 +1,5 @@
 import 'package:intl/intl.dart';
+import 'package:sqflite/sqflite.dart';
 import '../core/database/database_service.dart';
 import '../models/strategy_models.dart';
 
@@ -6,9 +7,19 @@ import '../models/strategy_models.dart';
 class AnalyticsService {
   final DatabaseService _db = DatabaseService();
 
+  Future<Database> get database => _db.database;
+
+  Future<Map<String, String>> _getGeneralSettings() async {
+    final db = await database;
+    final maps = await db.query('general_settings');
+    return {
+      for (var m in maps) m['setting_key'] as String: m['setting_value'] as String
+    };
+  }
+
   // ─── Summary totals ─────────────────────────────────────
 
-  Future<double> totalByNatureAndType(String nature, String? transactionType, String start, String end) async {
+  Future<double> totalByNatureAndType(String nature, String? transactionType, String start, String end, {String? widgetKey}) async {
     final db = await _db.database;
     String query = 'SELECT COALESCE(SUM(amount),0) as total FROM "transaction" WHERE nature=? AND transaction_date>=? AND transaction_date<=?';
     List<Object?> args = [nature, start, end];
@@ -16,39 +27,48 @@ class AnalyticsService {
       query += ' AND transaction_type=?';
       args.add(transactionType);
     }
+    
+    if (widgetKey != null) {
+      query += await _getFilterSnippet(widgetKey);
+    }
+
     final r = await db.rawQuery(query, args);
     return (r.first['total'] as num?)?.toDouble() ?? 0;
   }
 
-  Future<int> transactionCount(String start, String end) async {
+  Future<int> transactionCount(String start, String end, {String? widgetKey}) async {
     final db = await _db.database;
-    final r = await db.rawQuery(
-      'SELECT COUNT(*) as count FROM "transaction" '
-      'WHERE nature=\'TRANSACTIONS\' AND transaction_date>=? AND transaction_date<=?',
-      [start, end],
-    );
+    String query = 'SELECT COUNT(*) as count FROM "transaction" WHERE nature=\'TRANSACTIONS\' AND transaction_date>=? AND transaction_date<=?';
+    if (widgetKey != null) {
+      query += await _getFilterSnippet(widgetKey);
+    }
+    final r = await db.rawQuery(query, [start, end]);
     return (r.first['count'] as num?)?.toInt() ?? 0;
   }
 
-  Future<double> largestExpense(String start, String end) async {
+  Future<double> largestExpense(String start, String end, {String? widgetKey}) async {
     final db = await _db.database;
-    final r = await db.rawQuery(
-      'SELECT COALESCE(MAX(amount),0) as max_amount FROM "transaction" '
-      'WHERE nature=\'TRANSACTIONS\' AND transaction_type=\'DEBIT\' AND transaction_date>=? AND transaction_date<=?',
-      [start, end],
-    );
+    String query = 'SELECT COALESCE(MAX(amount),0) as max_amount FROM "transaction" WHERE nature=\'TRANSACTIONS\' AND transaction_type=\'DEBIT\' AND transaction_date>=? AND transaction_date<=?';
+    if (widgetKey != null) {
+      query += await _getFilterSnippet(widgetKey);
+    }
+    final r = await db.rawQuery(query, [start, end]);
     return (r.first['max_amount'] as num?)?.toDouble() ?? 0;
   }
 
   // ─── Top-N queries ──────────────────────────────────────
 
-  Future<List<Map<String, dynamic>>> topCategories(String start, String end, {int limit = 5}) async {
+  Future<List<Map<String, dynamic>>> topCategories(String start, String end, {int limit = 5, String? widgetKey}) async {
     final db = await _db.database;
+    String filter = '';
+    if (widgetKey != null) {
+      filter = await _getFilterSnippet(widgetKey);
+    }
     return db.rawQuery(
       'SELECT c.category_id, c.category_name, c.icon, c.icon_color, '
       'COALESCE(SUM(t.amount),0) as total '
       'FROM "transaction" t JOIN category c ON t.category_id=c.category_id '
-      'WHERE t.nature=\'TRANSACTIONS\' AND t.transaction_type=\'DEBIT\' AND substr(t.transaction_date, 1, 10)>=? AND substr(t.transaction_date, 1, 10)<=? '
+      'WHERE t.nature=\'TRANSACTIONS\' AND t.transaction_type=\'DEBIT\' AND t.transaction_date>=? AND t.transaction_date<=? $filter '
       'GROUP BY c.category_id ORDER BY total DESC LIMIT ?',
       [start, end, limit],
     );
@@ -104,15 +124,16 @@ class AnalyticsService {
 
   // ─── Trends ─────────────────────────────────────────────
 
-  Future<List<Map<String, dynamic>>> expensePerDay(String start, String end) async {
+  Future<List<Map<String, dynamic>>> expensePerDay(String start, String end, {String? widgetKey}) async {
     final db = await _db.database;
-    return db.rawQuery(
-      'SELECT substr(transaction_date, 1, 10) as period, COALESCE(SUM(amount),0) as total '
-      'FROM "transaction" WHERE nature=\'TRANSACTIONS\' AND transaction_type=\'DEBIT\' '
-      'AND substr(transaction_date, 1, 10)>=? AND substr(transaction_date, 1, 10)<=? '
-      'GROUP BY period ORDER BY period',
-      [start, end],
-    );
+    String query = 'SELECT substr(transaction_date, 1, 10) as period, COALESCE(SUM(amount),0) as total '
+                   'FROM "transaction" WHERE nature=\'TRANSACTIONS\' AND transaction_type=\'DEBIT\' '
+                   'AND transaction_date>=? AND transaction_date<=? ';
+    if (widgetKey != null) {
+      query += await _getFilterSnippet(widgetKey);
+    }
+    query += 'GROUP BY period ORDER BY period';
+    return db.rawQuery(query, [start, end]);
   }
 
   Future<List<Map<String, dynamic>>> expensePerMonth(String start, String end) async {
@@ -126,13 +147,18 @@ class AnalyticsService {
     );
   }
 
-  Future<List<Map<String, dynamic>>> incomeVsExpenseLast12Months() async {
+  Future<List<Map<String, dynamic>>> incomeVsExpenseLast12Months({String? widgetKey}) async {
     final db = await _db.database;
     final now = DateTime.now();
     final startOfCurrentMonth = DateTime(now.year, now.month, 1);
     final twelveMonthsAgo = DateTime(startOfCurrentMonth.year, startOfCurrentMonth.month - 11, 1);
     
     final startStr = '${twelveMonthsAgo.year}-${twelveMonthsAgo.month.toString().padLeft(2, '0')}-01';
+    
+    String filter = '';
+    if (widgetKey != null) {
+      filter = await _getFilterSnippet(widgetKey);
+    }
 
     final result = await db.rawQuery('''
       SELECT 
@@ -140,7 +166,7 @@ class AnalyticsService {
         COALESCE(SUM(CASE WHEN nature = 'TRANSACTIONS' AND transaction_type = 'CREDIT' THEN amount ELSE 0 END), 0) as income,
         COALESCE(SUM(CASE WHEN nature = 'TRANSACTIONS' AND transaction_type = 'DEBIT' THEN amount ELSE 0 END), 0) as expense
       FROM "transaction" 
-      WHERE transaction_date >= ?
+      WHERE transaction_date >= ? $filter
       GROUP BY period 
       ORDER BY period ASC
     ''', [startStr]);
@@ -174,12 +200,17 @@ class AnalyticsService {
     return paddedResult;
   }
 
-  Future<List<Map<String, dynamic>>> netInvestmentsLast12Months() async {
+  Future<List<Map<String, dynamic>>> netInvestmentsLast12Months({String? widgetKey}) async {
     final db = await _db.database;
     final now = DateTime.now();
     final startOfCurrentMonth = DateTime(now.year, now.month, 1);
     final twelveMonthsAgo = DateTime(startOfCurrentMonth.year, startOfCurrentMonth.month - 11, 1);
     final startStr = '${twelveMonthsAgo.year}-${twelveMonthsAgo.month.toString().padLeft(2, '0')}-01';
+
+    String filter = '';
+    if (widgetKey != null) {
+      filter = await _getFilterSnippet(widgetKey);
+    }
 
     final result = await db.rawQuery('''
       SELECT
@@ -188,7 +219,7 @@ class AnalyticsService {
         - COALESCE(SUM(CASE WHEN transaction_type = 'CREDIT' THEN amount ELSE 0 END), 0) as net_investment
       FROM "transaction"
       WHERE nature = 'INVESTMENTS'
-        AND transaction_date >= ?
+        AND transaction_date >= ? $filter
       GROUP BY period
       ORDER BY period ASC
     ''', [startStr]);
@@ -282,7 +313,7 @@ class AnalyticsService {
     };
   }
 
-  Future<List<Map<String, dynamic>>> budgetVsActual(int month, int year, {List<String> categoryTypes = const ['TRANSACTIONS']}) async {
+  Future<List<Map<String, dynamic>>> budgetVsActual(int month, int year, {List<String> categoryTypes = const ['TRANSACTIONS'], String? widgetKey}) async {
     final db = await _db.database;
     final start = '$year-${month.toString().padLeft(2, '0')}-01';
     final endMonth = month == 12 ? 1 : month + 1;
@@ -309,6 +340,7 @@ class AnalyticsService {
           FROM "transaction" t 
           WHERE t.category_id = c.category_id 
           AND t.transaction_date >= ? AND t.transaction_date < ?
+          ${widgetKey != null ? await _getFilterSnippet(widgetKey) : ''}
         ), 0) as actual
       FROM category c
       LEFT JOIN budget bm ON c.category_id = bm.category_id 
@@ -361,7 +393,7 @@ class AnalyticsService {
 
   // ─── Expense Breakdowns (Pie Charts) ────────────────────
 
-  Future<List<Map<String, dynamic>>> expensesByCategory(String start, String end) async {
+  Future<List<Map<String, dynamic>>> expensesByCategory(String start, String end, {String? widgetKey}) async {
     final db = await _db.database;
     return db.rawQuery('''
       SELECT 
@@ -372,6 +404,7 @@ class AnalyticsService {
       FROM "transaction" t
       LEFT JOIN category c ON t.category_id = c.category_id
       WHERE t.nature='TRANSACTIONS' AND t.transaction_type='DEBIT' AND t.transaction_date >= ? AND t.transaction_date <= ?
+      ${widgetKey != null ? await _getFilterSnippet(widgetKey) : ''}
       GROUP BY c.category_id
       HAVING value > 0
       ORDER BY value DESC
@@ -426,7 +459,7 @@ class AnalyticsService {
     ''', [start, end]);
   }
 
-  Future<List<Map<String, dynamic>>> expensesBySubCategory(String start, String end, int categoryId) async {
+  Future<List<Map<String, dynamic>>> expensesBySubCategory(String start, String end, int categoryId, {String? widgetKey}) async {
     final db = await _db.database;
     return db.rawQuery('''
       SELECT 
@@ -436,6 +469,7 @@ class AnalyticsService {
       FROM "transaction" t
       LEFT JOIN sub_category s ON t.subcategory_id = s.subcategory_id
       WHERE t.nature='TRANSACTIONS' AND t.transaction_type='DEBIT' AND t.transaction_date >= ? AND t.transaction_date <= ? AND t.category_id = ?
+      ${widgetKey != null ? await _getFilterSnippet(widgetKey) : ''}
       GROUP BY s.subcategory_id
       HAVING value > 0
       ORDER BY value DESC
@@ -458,8 +492,12 @@ class AnalyticsService {
     ''', [start, end]);
   }
 
-  Future<List<Map<String, dynamic>>> investmentsByCategory(String start, String end) async {
+  Future<List<Map<String, dynamic>>> investmentsByCategory(String start, String end, {String? widgetKey}) async {
     final db = await _db.database;
+    String filter = '';
+    if (widgetKey != null) {
+      filter = await _getFilterSnippet(widgetKey);
+    }
     return db.rawQuery('''
       SELECT 
         c.category_id as id,
@@ -474,6 +512,7 @@ class AnalyticsService {
       WHERE t.nature = 'INVESTMENTS'
         AND t.transaction_date >= ?
         AND t.transaction_date <= ?
+        $filter
       GROUP BY c.category_id
       HAVING value > 0
       ORDER BY value DESC
@@ -514,68 +553,72 @@ class AnalyticsService {
     ''', [endStr]);
   }
 
-  Future<Map<String, double>> getIncomeAllocation(
-    String start,
-    String end, {
-    String? prevMonthStart,
-    String? prevMonthEnd,
+  Future<Map<String, double>> getIncomeAllocation({
+    required DateTime start,
+    required DateTime end,
+    bool? usePrevMonthSalary,
+    String? widgetKey,
   }) async {
-    final db = await _db.database;
+    final settings = await _getGeneralSettings();
+    final prefix = widgetKey == 'monthly_budget' ? 'budget_' : 
+                   widgetKey == 'strategic_planner' ? 'strategy_' : 'allocation_';
+
+    final salaryMode = settings['${prefix}salary_mode'] ?? 'CURRENT';
+    final otherMode = settings['${prefix}other_mode'] ?? 'CURRENT';
+
+    final actualUsePrevSalary = usePrevMonthSalary ?? (salaryMode == 'PREV');
+
     double income;
+    if (actualUsePrevSalary || otherMode == 'PREV') {
+      final prevMonthStart = DateTime(start.year, start.month - 1, 1);
+      final prevMonthEnd = DateTime(start.year, start.month, 0, 23, 59, 59);
 
-    if (prevMonthStart != null && prevMonthEnd != null) {
-      // Hybrid mode:
-      //   Part A — Salary subcategory from PREVIOUS month
-      //   Part B — All other income (non-salary or uncategorized) from CURRENT month
-      final salaryPrevQuery = await db.rawQuery('''
-        SELECT COALESCE(SUM(t.amount), 0) as total
-        FROM "transaction" t
-        LEFT JOIN sub_category sc ON t.subcategory_id = sc.subcategory_id
-        WHERE t.nature = 'TRANSACTIONS'
-          AND t.transaction_type = 'CREDIT'
-          AND LOWER(COALESCE(sc.subcategory_name, '')) = 'salary'
-          AND t.transaction_date >= ?
-          AND t.transaction_date <= ?
-      ''', [prevMonthStart, prevMonthEnd]);
-      final salaryFromPrev = (salaryPrevQuery.first['total'] as num).toDouble();
+      double salaryValue = 0;
+      double otherValue = 0;
 
-      final otherCurrentQuery = await db.rawQuery('''
-        SELECT COALESCE(SUM(t.amount), 0) as total
-        FROM "transaction" t
-        LEFT JOIN sub_category sc ON t.subcategory_id = sc.subcategory_id
-        WHERE t.nature = 'TRANSACTIONS'
-          AND t.transaction_type = 'CREDIT'
-          AND (LOWER(COALESCE(sc.subcategory_name, '')) != 'salary' OR t.subcategory_id IS NULL)
-          AND t.transaction_date >= ?
-          AND t.transaction_date <= ?
-      ''', [start, end]);
-      final otherFromCurrent = (otherCurrentQuery.first['total'] as num).toDouble();
+      // Salary Part
+      if (actualUsePrevSalary) {
+        salaryValue = await _getIncomeForCategory(prevMonthStart, prevMonthEnd, isSalary: true, widgetKey: widgetKey);
+      } else {
+        salaryValue = await _getIncomeForCategory(start, end, isSalary: true, widgetKey: widgetKey);
+      }
 
-      income = salaryFromPrev + otherFromCurrent;
+      // Other Part
+      if (otherMode == 'PREV') {
+        otherValue = await _getIncomeForCategory(prevMonthStart, prevMonthEnd, isSalary: false, widgetKey: widgetKey);
+      } else {
+        otherValue = await _getIncomeForCategory(start, end, isSalary: false, widgetKey: widgetKey);
+      }
+      income = salaryValue + otherValue;
     } else {
       // Simple mode: all income from current month
+      final db = await _db.database;
+      String filter = widgetKey != null ? await _getFilterSnippet(widgetKey) : '';
       final incomeQuery = await db.rawQuery(
-        'SELECT COALESCE(SUM(amount), 0) as total FROM "transaction" WHERE nature=\'TRANSACTIONS\' AND transaction_type=\'CREDIT\' AND transaction_date >= ? AND transaction_date <= ?',
-        [start, end],
+        'SELECT COALESCE(SUM(amount), 0) as total FROM "transaction" WHERE nature=\'TRANSACTIONS\' AND transaction_type=\'CREDIT\' AND transaction_date >= ? AND transaction_date <= ? $filter',
+        [start.toIso8601String(), end.toIso8601String()],
       );
       income = (incomeQuery.first['total'] as num).toDouble();
     }
 
     // Expenses — always current month
+    final db = await _db.database;
+    String expenseFilter = widgetKey != null ? await _getFilterSnippet(widgetKey) : '';
     final expenseQuery = await db.rawQuery(
-      'SELECT COALESCE(SUM(amount), 0) as total FROM "transaction" WHERE nature=\'TRANSACTIONS\' AND transaction_type=\'DEBIT\' AND transaction_date >= ? AND transaction_date <= ?',
-      [start, end],
+      'SELECT COALESCE(SUM(amount), 0) as total FROM "transaction" WHERE nature=\'TRANSACTIONS\' AND transaction_type=\'DEBIT\' AND transaction_date >= ? AND transaction_date <= ? $expenseFilter',
+      [start.toIso8601String(), end.toIso8601String()],
     );
     final expenses = (expenseQuery.first['total'] as num).toDouble();
 
-    // Net investments — DEBIT minus CREDIT (withdrawals reduce net investment)
+    // Net investments — DEBIT minus CREDIT
+    String invFilter = widgetKey != null ? await _getFilterSnippet(widgetKey) : '';
     final invDebitQuery = await db.rawQuery(
-      'SELECT COALESCE(SUM(amount), 0) as total FROM "transaction" WHERE nature=\'INVESTMENTS\' AND transaction_type=\'DEBIT\' AND transaction_date >= ? AND transaction_date <= ?',
-      [start, end],
+      'SELECT COALESCE(SUM(amount), 0) as total FROM "transaction" WHERE nature=\'INVESTMENTS\' AND transaction_type=\'DEBIT\' AND transaction_date >= ? AND transaction_date <= ? $invFilter',
+      [start.toIso8601String(), end.toIso8601String()],
     );
     final invCreditQuery = await db.rawQuery(
-      'SELECT COALESCE(SUM(amount), 0) as total FROM "transaction" WHERE nature=\'INVESTMENTS\' AND transaction_type=\'CREDIT\' AND transaction_date >= ? AND transaction_date <= ?',
-      [start, end],
+      'SELECT COALESCE(SUM(amount), 0) as total FROM "transaction" WHERE nature=\'INVESTMENTS\' AND transaction_type=\'CREDIT\' AND transaction_date >= ? AND transaction_date <= ? $invFilter',
+      [start.toIso8601String(), end.toIso8601String()],
     );
     final investments = ((invDebitQuery.first['total'] as num).toDouble() -
         (invCreditQuery.first['total'] as num).toDouble()).clamp(0.0, double.infinity);
@@ -587,9 +630,33 @@ class AnalyticsService {
     };
   }
 
+  Future<double> _getIncomeForCategory(DateTime start, DateTime end, {required bool isSalary, String? widgetKey}) async {
+    final db = await _db.database;
+    String filter = widgetKey != null ? await _getFilterSnippet(widgetKey) : '';
+    
+    String query = '''
+      SELECT SUM(t.amount) as total 
+      FROM "transaction" t
+      LEFT JOIN sub_category sc ON t.subcategory_id = sc.subcategory_id
+      WHERE t.nature = 'TRANSACTIONS' 
+      AND t.transaction_type = 'CREDIT'
+      AND t.transaction_date BETWEEN ? AND ?
+      $filter
+    ''';
+
+    if (isSalary) {
+      query += " AND LOWER(COALESCE(sc.subcategory_name, '')) = 'salary'";
+    } else {
+      query += " AND LOWER(COALESCE(sc.subcategory_name, '')) != 'salary'";
+    }
+
+    final results = await db.rawQuery(query, [start.toIso8601String(), end.toIso8601String()]);
+    return (results.first['total'] as num?)?.toDouble() ?? 0.0;
+  }
+
   // ─── Strategic Planner (Heuristics) ────────────────────
 
-  Future<List<BucketProgress>> getStrategyProgress(DateTime date) async {
+  Future<List<BucketProgress>> getStrategyProgress(DateTime date, {String? widgetKey}) async {
     final db = await _db.database;
     final start = DateFormat('yyyy-MM-dd').format(DateTime(date.year, date.month, 1));
     final end = DateFormat('yyyy-MM-dd').format(DateTime(date.year, date.month + 1, 0));
@@ -604,7 +671,7 @@ class AnalyticsService {
     final bucketModels = buckets.map((b) => BudgetBucket.fromMap(b)).toList();
 
     // 3. Determine Baseline Salary
-    final baseline = await getStrategyBaseline(date);
+    final baseline = await getStrategyBaseline(date, widgetKey: widgetKey);
 
     // 4. Get Mappings
     final mappings = await db.query('category_bucket_mapping', where: 'framework_id = ?', whereArgs: [framework.id]);
@@ -627,6 +694,7 @@ class AnalyticsService {
           ELSE 0 END) as total
       FROM "transaction"
       WHERE transaction_date >= ? AND transaction_date <= ?
+      ${widgetKey != null ? await _getFilterSnippet(widgetKey) : ""}
       GROUP BY category_id
     ''', [start, end]);
 
@@ -650,17 +718,76 @@ class AnalyticsService {
     }).toList();
   }
 
-  Future<double> getStrategyBaseline(DateTime date) async {
+  Future<double> getStrategyBaseline(DateTime date, {String? widgetKey}) async {
+    final start = DateTime(date.year, date.month, 1);
+    final end = DateTime(date.year, date.month + 1, 0, 23, 59, 59);
+    final prevMonthStart = DateTime(date.year, date.month - 1, 1);
+    final prevMonthEnd = DateTime(date.year, date.month, 0, 23, 59, 59);
+
+    final settings = await _getGeneralSettings();
+    final prefix = widgetKey == 'monthly_budget' ? 'budget_' : 
+                   widgetKey == 'income_allocation' ? 'allocation_' : 'strategy_';
+
+    final salaryMode = settings['${prefix}salary_mode'] ?? 'CURRENT';
+    final otherMode = settings['${prefix}other_mode'] ?? 'CURRENT';
+
+    final sStart = salaryMode == 'PREV' ? prevMonthStart : start;
+    final sEnd = salaryMode == 'PREV' ? prevMonthEnd : end;
+    double baselineIncome = await _getIncomeForCategory(sStart, sEnd, isSalary: true, widgetKey: widgetKey);
+
+    // Add other income if needed
+    final oStart = otherMode == 'PREV' ? prevMonthStart : start;
+    final oEnd = otherMode == 'PREV' ? prevMonthEnd : end;
+    baselineIncome += await _getIncomeForCategory(oStart, oEnd, isSalary: false, widgetKey: widgetKey);
+
+    return baselineIncome;
+  }
+
+  // ─── Filter Helpers ─────────────────────────────────────
+
+  Future<String> _getFilterSnippet(String widgetKey) async {
     final db = await _db.database;
-    final settings = await db.query('strategy_settings', where: 'month = ? AND year = ?', whereArgs: [date.month, date.year]);
-    if (settings.isNotEmpty && settings.first['salary_override'] != null) {
-      return (settings.first['salary_override'] as num).toDouble();
+    final filters = await db.query('widget_filter', where: 'widget_key = ?', whereArgs: [widgetKey]);
+    if (filters.isEmpty) return '';
+
+    final excludedCategories = filters
+        .where((f) => f['filter_type'] == 'EXCLUDE' && f['target_type'] == 'CATEGORY')
+        .map((f) => f['target_id'])
+        .toList();
+    
+    final excludedSubcats = filters
+        .where((f) => f['filter_type'] == 'EXCLUDE' && f['target_type'] == 'SUBCATEGORY')
+        .map((f) => f['target_id'])
+        .toList();
+
+    String snippet = '';
+    if (excludedCategories.isNotEmpty) {
+      snippet += ' AND category_id NOT IN (${excludedCategories.join(",")})';
+    }
+    if (excludedSubcats.isNotEmpty) {
+      snippet += ' AND subcategory_id NOT IN (${excludedSubcats.join(",")})';
     }
     
-    final prevMonth = DateTime(date.year, date.month - 1);
-    final prevStart = DateFormat('yyyy-MM-dd').format(DateTime(prevMonth.year, prevMonth.month, 1));
-    final prevEnd = DateFormat('yyyy-MM-dd').format(DateTime(prevMonth.year, prevMonth.month + 1, 0));
-    final prevIncome = await getIncomeAllocation(prevStart, prevEnd);
-    return prevIncome['income'] ?? 0.0;
+    // For INCLUDE filters, it's a bit more complex. 
+    // If any INCLUDE filters exist for a type, then ONLY those must be included.
+    final includedCategories = filters
+        .where((f) => f['filter_type'] == 'INCLUDE' && f['target_type'] == 'CATEGORY')
+        .map((f) => f['target_id'])
+        .toList();
+    
+    if (includedCategories.isNotEmpty) {
+       snippet += ' AND category_id IN (${includedCategories.join(",")})';
+    }
+    
+    final includedSubcats = filters
+        .where((f) => f['filter_type'] == 'INCLUDE' && f['target_type'] == 'SUBCATEGORY')
+        .map((f) => f['target_id'])
+        .toList();
+    
+    if (includedSubcats.isNotEmpty) {
+       snippet += ' AND subcategory_id IN (${includedSubcats.join(",")})';
+    }
+
+    return snippet;
   }
 }

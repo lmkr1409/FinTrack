@@ -37,8 +37,8 @@ class _StrategyTabState extends ConsumerState<StrategyTab> {
     setState(() => _loading = true);
     final analytics = ref.read(analyticsServiceProvider);
     
-    final progress = await analytics.getStrategyProgress(widget.selectedMonth);
-    final baseline = await analytics.getStrategyBaseline(widget.selectedMonth);
+    final progress = await analytics.getStrategyProgress(widget.selectedMonth, widgetKey: 'strategic_planner');
+    final baseline = await analytics.getStrategyBaseline(widget.selectedMonth, widgetKey: 'strategic_planner');
 
     if (mounted) {
       setState(() {
@@ -58,6 +58,7 @@ class _StrategyTabState extends ConsumerState<StrategyTab> {
     }
 
     final totalAllocated = _progress.fold(0.0, (sum, p) => sum + p.targetAmount);
+    final totalUsed = _progress.fold(0.0, (sum, p) => sum + p.actualAmount);
     final remaining = _baseline - totalAllocated;
 
     return RefreshIndicator(
@@ -65,7 +66,7 @@ class _StrategyTabState extends ConsumerState<StrategyTab> {
       child: ListView(
         padding: const EdgeInsets.all(16),
         children: [
-          _buildBaselineHeader(),
+          _buildSummaryCard(totalUsed),
           const SizedBox(height: 16),
           ..._progress.map((p) => _buildBucketCard(p)),
           if (remaining.abs() > 1) _buildAllocationWarning(remaining),
@@ -75,25 +76,31 @@ class _StrategyTabState extends ConsumerState<StrategyTab> {
     );
   }
 
-  Widget _buildBaselineHeader() {
+
+  Widget _buildSummaryCard(double totalUsed) {
+    final remainingAvailable = _baseline - totalUsed;
     return GlassCard(
-      padding: const EdgeInsets.all(20),
-      child: Column(
+      padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
+      child: Row(
         children: [
-          const Text('Strategic Baseline (Salary)', style: TextStyle(color: AppColors.textMuted, fontSize: 12)),
-          const SizedBox(height: 4),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Text(
-                '₹${_baseline.toStringAsFixed(0)}',
-                style: const TextStyle(fontSize: 32, fontWeight: FontWeight.bold, color: AppColors.textPrimary),
-              ),
-            ],
+          const Icon(Icons.analytics_rounded, color: Colors.white70, size: 20),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Text(
+                  'Strategic Progress Summary', 
+                  style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13)
+                ),
+                Text(
+                  'Baseline: ₹${_baseline.toStringAsFixed(0)} | Used: ₹${totalUsed.toStringAsFixed(0)} | ₹${remainingAvailable.toStringAsFixed(0)} available',
+                  style: const TextStyle(color: Colors.white60, fontSize: 11),
+                ),
+              ],
+            ),
           ),
-          const Text('Targets below are calculated from this amount', style: TextStyle(color: Colors.white38, fontSize: 10)),
-          const SizedBox(height: 4),
-          const Text('(Change workspace baseline in Settings)', style: TextStyle(color: Colors.white12, fontSize: 10)),
         ],
       ),
     );

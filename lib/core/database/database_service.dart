@@ -262,6 +262,27 @@ class DatabaseService {
         'framework_id': f8020Id, 'name': 'Savings', 'percentage': 20.0, 'bucket_type': 'SAVED', 'icon': 'savings_rounded', 'icon_color': '#4CAF50'
       });
     }
+
+    if (oldVersion < 9) {
+      await db.execute('''
+        CREATE TABLE IF NOT EXISTS widget_filter (
+          filter_id INTEGER PRIMARY KEY AUTOINCREMENT,
+          widget_key TEXT NOT NULL,
+          target_id INTEGER NOT NULL,
+          target_type TEXT NOT NULL,
+          filter_type TEXT NOT NULL,
+          UNIQUE(widget_key, target_id, target_type)
+        )
+      ''');
+    }
+    if (oldVersion < 10) {
+      await db.execute('''
+        CREATE TABLE IF NOT EXISTS general_settings (
+          setting_key TEXT PRIMARY KEY,
+          setting_value TEXT NOT NULL
+        )
+      ''');
+    }
   }
 
   /// Reads and executes the SQL schema/seed file from assets.

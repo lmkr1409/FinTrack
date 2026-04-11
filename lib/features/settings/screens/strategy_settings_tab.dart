@@ -23,8 +23,6 @@ class _StrategySettingsTabState extends ConsumerState<StrategySettingsTab> {
   List<BudgetBucket> _buckets = [];
   List<Category> _categories = [];
   Map<int, int> _mappings = {}; // CategoryID -> BucketID
-  DateTime _selectedMonth = DateTime(DateTime.now().year, DateTime.now().month);
-  double _baseline = 0;
 
   @override
   void initState() {
@@ -36,12 +34,10 @@ class _StrategySettingsTabState extends ConsumerState<StrategySettingsTab> {
     setState(() => _loading = true);
     final repo = ref.read(strategyRepositoryProvider);
     final catRepo = ref.read(categoryRepositoryProvider);
-    final analytics = ref.read(analyticsServiceProvider);
 
     final frameworks = await repo.getAllFrameworks();
     final active = await repo.getActiveFramework();
     final categories = await catRepo.getAllSorted();
-    final baseline = await analytics.getStrategyBaseline(_selectedMonth);
     
     if (active != null) {
       final buckets = await repo.getBucketsForFramework(active.id!);
@@ -64,13 +60,11 @@ class _StrategySettingsTabState extends ConsumerState<StrategySettingsTab> {
         _buckets = buckets;
         _categories = categories.where((c) => c.categoryName.toLowerCase() != 'income').toList();
         _mappings = mappings;
-        _baseline = baseline;
         _loading = false;
       });
     } else {
       setState(() {
         _frameworks = frameworks;
-        _baseline = baseline;
         _loading = false;
       });
     }
@@ -107,12 +101,7 @@ class _StrategySettingsTabState extends ConsumerState<StrategySettingsTab> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text('Strategy Baseline', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
-                const SizedBox(height: 8),
-                const Text('Targets are calculated from this salary baseline.', style: TextStyle(color: AppColors.textMuted, fontSize: 13)),
                 const SizedBox(height: 16),
-                _buildBaselineHeader(),
-                const SizedBox(height: 32),
                 const Text('Budgeting Framework', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
                 const SizedBox(height: 8),
                 const Text('Choose the heuristic rule that governs your financial choices.', style: TextStyle(color: AppColors.textMuted, fontSize: 13)),
@@ -260,112 +249,6 @@ class _StrategySettingsTabState extends ConsumerState<StrategySettingsTab> {
             ),
           ],
         ),
-      ),
-    );
-  }
-
-  Widget _buildBaselineHeader() {
-    final monthYearStr = "${_selectedMonth.month}/${_selectedMonth.year}";
-    return GlassCard(
-      padding: const EdgeInsets.all(16),
-      child: Column(
-        children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text(
-                'Month: $monthYearStr',
-                style: const TextStyle(color: AppColors.textMuted, fontSize: 14),
-              ),
-              TextButton.icon(
-                icon: const Icon(Icons.calendar_month_rounded, size: 16),
-                label: const Text('Change Month', style: TextStyle(fontSize: 12)),
-                onPressed: _selectMonth,
-              ),
-            ],
-          ),
-          const Divider(height: 24, color: Colors.white10),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Text(
-                '₹${_baseline.toStringAsFixed(0)}',
-                style: const TextStyle(fontSize: 32, fontWeight: FontWeight.bold, color: AppColors.textPrimary),
-              ),
-              const SizedBox(width: 12),
-              IconButton(
-                style: IconButton.styleFrom(
-                  backgroundColor: AppColors.primary.withOpacity(0.1),
-                  foregroundColor: AppColors.primary,
-                ),
-                icon: const Icon(Icons.edit_rounded, size: 20),
-                onPressed: _showSalaryOverrideDialog,
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-
-  Future<void> _selectMonth() async {
-    final DateTime? picked = await showDatePicker(
-      context: context,
-      initialDate: _selectedMonth,
-      firstDate: DateTime(2020),
-      lastDate: DateTime(2101),
-      helpText: 'Select Month for Baseline',
-    );
-    if (picked != null && picked != _selectedMonth) {
-      setState(() {
-        _selectedMonth = DateTime(picked.year, picked.month);
-      });
-      _loadData();
-    }
-  }
-
-  void _showSalaryOverrideDialog() {
-    final controller = TextEditingController(text: _baseline.toStringAsFixed(0));
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Edit Strategic Baseline'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text('Adjust baseline for ${_selectedMonth.month}/${_selectedMonth.year}', 
-              style: const TextStyle(fontSize: 13, color: AppColors.textMuted)),
-            const SizedBox(height: 16),
-            TextField(
-              controller: controller,
-              keyboardType: TextInputType.number,
-              autofocus: true,
-              decoration: const InputDecoration(
-                prefixText: '₹ ',
-                labelText: 'Baseline Amount',
-                border: OutlineInputBorder(),
-              ),
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
-          FilledButton(
-            onPressed: () async {
-              final amount = double.tryParse(controller.text) ?? 0;
-              await ref.read(strategyRepositoryProvider).updateSalaryOverride(
-                _selectedMonth.month,
-                _selectedMonth.year,
-                amount,
-              );
-              if (mounted) {
-                Navigator.pop(context);
-                _loadData();
-              }
-            },
-            child: const Text('Save'),
-          ),
-        ],
       ),
     );
   }

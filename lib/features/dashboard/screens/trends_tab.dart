@@ -43,8 +43,8 @@ class _TrendsTabState extends State<TrendsTab> {
   Future<void> _loadData() async {
     setState(() => _loading = true);
     
-    final yearly = await _analytics.incomeVsExpenseLast12Months();
-    final investmentTrend = await _analytics.netInvestmentsLast12Months();
+    final yearly = await _analytics.incomeVsExpenseLast12Months(widgetKey: 'monthly_trends');
+    final investmentTrend = await _analytics.netInvestmentsLast12Months(widgetKey: 'monthly_trends');
     final budgetStats = await _analytics.getLast12MonthsBudgetStats();
 
     double totalIncome12m = 0;

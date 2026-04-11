@@ -2,7 +2,6 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:intl/intl.dart';
 
 import '../../../core/theme/app_colors.dart';
 import '../../../services/analytics_service.dart';
@@ -51,11 +50,15 @@ class _BudgetsTabState extends State<BudgetsTab> {
   Future<void> _loadData({bool showLoading = false}) async {
     if (showLoading) setState(() => _loading = true);
 
-    final startStr = DateFormat('yyyy-MM-dd').format(DateTime(widget.selectedMonth.year, widget.selectedMonth.month, 1));
-    final endStr = DateFormat('yyyy-MM-dd').format(DateTime(widget.selectedMonth.year, widget.selectedMonth.month + 1, 0));
-
-    final data = await _analytics.budgetVsActual(widget.selectedMonth.month, widget.selectedMonth.year, categoryTypes: ['TRANSACTIONS', 'INVESTMENTS']);
-    final income = await _analytics.getIncomeAllocation(startStr, endStr);
+    final start = DateTime(widget.selectedMonth.year, widget.selectedMonth.month, 1);
+    final end = DateTime(widget.selectedMonth.year, widget.selectedMonth.month + 1, 0, 23, 59, 59);
+    
+    final data = await _analytics.budgetVsActual(widget.selectedMonth.month, widget.selectedMonth.year, categoryTypes: ['TRANSACTIONS', 'INVESTMENTS'], widgetKey: 'budget_tracker');
+    final income = await _analytics.getIncomeAllocation(
+      start: start,
+      end: end,
+      widgetKey: 'budget_tracker',
+    );
     
     if (!mounted) return;
     setState(() {

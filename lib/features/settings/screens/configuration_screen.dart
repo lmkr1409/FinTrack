@@ -4,6 +4,7 @@ import '../../../features/categories/screens/categories_tab.dart';
 import 'accounts_payments_tab.dart';
 import 'planner_settings_tab.dart';
 import 'entities_tab.dart';
+import 'settings_tab.dart';
 
 /// Configuration section with a 5-tab Bottom Navigation Bar.
 class ConfigurationScreen extends StatefulWidget {
@@ -21,6 +22,7 @@ class _ConfigurationScreenState extends State<ConfigurationScreen> {
     PlannerSettingsTab(),
     AccountsPaymentsTab(),
     EntitiesTab(),
+    const SettingsTab(),
   ];
 
   @override
@@ -52,6 +54,11 @@ class _ConfigurationScreenState extends State<ConfigurationScreen> {
             icon: Icon(Icons.bookmarks_outlined),
             selectedIcon: Icon(Icons.bookmarks_rounded),
             label: 'Entities',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.settings_outlined),
+            selectedIcon: Icon(Icons.settings_rounded),
+            label: 'Settings',
           ),
         ],
       ),

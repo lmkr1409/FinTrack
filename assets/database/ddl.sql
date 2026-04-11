@@ -217,3 +217,17 @@ CREATE TABLE IF NOT EXISTS strategy_settings (
 	salary_override REAL,
 	PRIMARY KEY (month, year)
 );
+
+CREATE TABLE IF NOT EXISTS widget_filter (
+	filter_id INTEGER PRIMARY KEY AUTOINCREMENT,
+	widget_key TEXT NOT NULL,
+	target_id INTEGER NOT NULL,
+	target_type TEXT NOT NULL,
+	filter_type TEXT NOT NULL,
+	UNIQUE(widget_key, target_id, target_type)
+);
+
+CREATE TABLE IF NOT EXISTS general_settings (
+	setting_key TEXT PRIMARY KEY,
+	setting_value TEXT NOT NULL
+);

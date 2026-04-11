@@ -15,6 +15,8 @@ import '../repositories/transaction_rule_repository.dart';
 import '../repositories/budget_total_repository.dart';
 import '../repositories/investment_goal_repository.dart';
 import '../repositories/strategy_repository.dart';
+import '../repositories/widget_filter_repository.dart';
+import '../repositories/general_settings_repository.dart';
 import 'analytics_service.dart';
 
 // ─── Repository Providers ────────────────────────────────────────────
@@ -77,6 +79,14 @@ final investmentGoalRepositoryProvider = Provider<InvestmentGoalRepository>((ref
 
 final strategyRepositoryProvider = Provider<StrategyRepository>((ref) {
   return StrategyRepository();
+});
+
+final widgetFilterRepositoryProvider = Provider<WidgetFilterRepository>((ref) {
+  return WidgetFilterRepository();
+});
+
+final generalSettingsRepositoryProvider = Provider<GeneralSettingsRepository>((ref) {
+  return GeneralSettingsRepository();
 });
 
 final analyticsServiceProvider = Provider<AnalyticsService>((ref) {

@@ -31,7 +31,6 @@ class _DashboardsTabState extends State<DashboardsTab> {
   double _spendingTrend = 0;
   bool _isSpendingUp = false;
   Map<String, double> _allocation = {'income': 0, 'expenses': 0, 'investments': 0};
-  bool _usePrevMonthIncome = true; // Use previous month's salary as the income baseline
   String _incomeSourceLabel = ''; // Shows which month's income is being used
 
   List<Map<String, dynamic>> _dailyTrend = [];
@@ -71,27 +70,43 @@ class _DashboardsTabState extends State<DashboardsTab> {
       'yyyy-MM-dd',
     ).format(DateTime(_selectedMonth.year, _selectedMonth.month, 0));
 
-    final income = await _analytics.totalByNatureAndType('TRANSACTIONS', 'CREDIT', start, end);
-    final expense = await _analytics.totalByNatureAndType('TRANSACTIONS', 'DEBIT', start, end);
-    final tCount = await _analytics.transactionCount(start, end);
-    final maxExp = await _analytics.largestExpense(start, end);
+    final income = await _analytics.totalByNatureAndType('TRANSACTIONS', 'CREDIT', start, end, widgetKey: 'financial_summary');
+    final expense = await _analytics.totalByNatureAndType('TRANSACTIONS', 'DEBIT', start, end, widgetKey: 'financial_summary');
+    final tCount = await _analytics.transactionCount(start, end, widgetKey: 'financial_summary');
+    final maxExp = await _analytics.largestExpense(start, end, widgetKey: 'financial_summary');
     final allocation = await _analytics.getIncomeAllocation(
-      start,
-      end,
-      prevMonthStart: _usePrevMonthIncome ? prevMonthStart : null,
-      prevMonthEnd: _usePrevMonthIncome ? prevMonthEnd : null,
+      start: DateTime(_selectedMonth.year, _selectedMonth.month, 1),
+      end: DateTime(_selectedMonth.year, _selectedMonth.month + 1, 0, 23, 59, 59),
+      widgetKey: 'income_allocation',
     );
+    
+    // Fetch settings to update the label
+    final db = await _analytics.database;
+    final settingMaps = await db.query('general_settings');
+    final settings = {for (var m in settingMaps) m['setting_key'] as String: m['setting_value'] as String};
+    final salaryMode = settings['allocation_salary_mode'] ?? 'CURRENT';
+    final otherMode = settings['allocation_other_mode'] ?? 'CURRENT';
+
     final prevMonthName = DateFormat('MMM yyyy').format(DateTime(_selectedMonth.year, _selectedMonth.month - 1));
     final currMonthName = DateFormat('MMM yyyy').format(_selectedMonth);
-    final incomeLabel = _usePrevMonthIncome
-        ? 'Salary from $prevMonthName + other income'
-        : 'All income from $currMonthName';
+    
+    String incomeLabel = '';
+    if (salaryMode == 'PREV' && otherMode == 'PREV') {
+      incomeLabel = 'All income from $prevMonthName';
+    } else if (salaryMode == 'PREV' && otherMode == 'CURRENT') {
+      incomeLabel = 'Salary from $prevMonthName + other from $currMonthName';
+    } else if (salaryMode == 'CURRENT' && otherMode == 'PREV') {
+      incomeLabel = 'Salary from $currMonthName + other from $prevMonthName';
+    } else {
+      incomeLabel = 'All income from $currMonthName';
+    }
 
     final prevExpense = await _analytics.totalByNatureAndType(
       'TRANSACTIONS',
       'DEBIT',
       prevMonthStart,
       prevMonthEnd,
+      widgetKey: 'financial_summary',
     );
     final now = DateTime.now();
     final daysToDivide =
@@ -104,15 +119,15 @@ class _DashboardsTabState extends State<DashboardsTab> {
         ? ((expense - prevExpense) / prevExpense) * 100
         : (expense > 0 ? 100.0 : 0.0);
 
-    final dailyTrend = await _analytics.expensePerDay(start, end);
-    final categoryList = await _analytics.expensesByCategory(start, end);
-    final investmentPie = await _analytics.investmentsByCategory(start, end);
+    final dailyTrend = await _analytics.expensePerDay(start, end, widgetKey: 'daily_heatmap');
+    final categoryList = await _analytics.expensesByCategory(start, end, widgetKey: 'expense_breakdown');
+    final investmentPie = await _analytics.investmentsByCategory(start, end, widgetKey: 'investment_breakdown');
     List<Map<String, dynamic>> pieChartData = [];
 
     switch (_pieChartGrouping) {
       case PieChartGrouping.category:
         if (_selectedCategoryId != null) {
-          pieChartData = await _analytics.expensesBySubCategory(start, end, _selectedCategoryId!);
+          pieChartData = await _analytics.expensesBySubCategory(start, end, _selectedCategoryId!, widgetKey: 'expense_breakdown');
         } else {
           pieChartData = categoryList;
         }
@@ -367,21 +382,10 @@ class _DashboardsTabState extends State<DashboardsTab> {
                     style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: AppColors.textSecondary),
                   ),
                   const SizedBox(width: 4),
-                  Tooltip(
-                    message: _usePrevMonthIncome
-                        ? 'Using previous month\'s income as baseline'
-                        : 'Using current month income as baseline',
-                    child: GestureDetector(
-                      onTap: () {
-                        setState(() => _usePrevMonthIncome = !_usePrevMonthIncome);
-                        _loadData();
-                      },
-                      child: Icon(
-                        _usePrevMonthIncome ? Icons.history_toggle_off_rounded : Icons.calendar_today_rounded,
-                        size: 18,
-                        color: _usePrevMonthIncome ? AppColors.primary : AppColors.textMuted,
-                      ),
-                    ),
+                  const Icon(
+                    Icons.settings_suggest_rounded,
+                    size: 18,
+                    color: AppColors.textMuted,
                   ),
                 ],
               ),
@@ -786,6 +790,11 @@ class _DynamicPieChartSection extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          const Text(
+            'Expense Breakdown',
+            style: TextStyle(fontWeight: FontWeight.bold, color: AppColors.primary, fontSize: 14),
+          ),
+          const SizedBox(height: 12),
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [

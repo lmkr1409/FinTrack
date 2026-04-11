@@ -66,9 +66,13 @@ class _BudgetTabState extends ConsumerState<BudgetTab> {
     _populateLocalInputs(budgets);
 
     // Fetch income for reference
-    final startStr = DateFormat('yyyy-MM-dd').format(DateTime(_selectedMonth.year, _selectedMonth.month, 1));
-    final endStr = DateFormat('yyyy-MM-dd').format(DateTime(_selectedMonth.year, _selectedMonth.month + 1, 0));
-    final income = await ref.read(analyticsServiceProvider).getIncomeAllocation(startStr, endStr);
+    final start = DateTime(_selectedMonth.year, _selectedMonth.month, 1);
+    final end = DateTime(_selectedMonth.year, _selectedMonth.month + 1, 0, 23, 59, 59);
+    final income = await ref.read(analyticsServiceProvider).getIncomeAllocation(
+      start: start,
+      end: end,
+      widgetKey: 'monthly_budget',
+    );
 
     setState(() {
       _budgets = budgets;
@@ -453,7 +457,7 @@ class _BudgetTabState extends ConsumerState<BudgetTab> {
                       ),
                     ],
                   ),
-                  if (total > 0 || income > 0)
+                  if (isMonthly && (total > 0 || income > 0))
                     Text(
                       'Income: ₹${income.toStringAsFixed(0)} | Allocated: ₹${planned.toStringAsFixed(0)} | ${isExceeded ? 'Exceeded' : '₹${(total - planned).toStringAsFixed(0)} left'}',
                       style: TextStyle(color: isExceeded ? Colors.redAccent : Colors.white60, fontSize: 11),

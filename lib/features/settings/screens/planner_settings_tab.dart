@@ -24,9 +24,21 @@ class _PlannerSettingsTabState extends State<PlannerSettingsTab> {
               padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
               child: SegmentedButton<int>(
                 segments: const [
-                  ButtonSegment(value: 0, label: Text('Strategy'), icon: Icon(Icons.insights_rounded)),
-                  ButtonSegment(value: 1, label: Text('Monthly Budget'), icon: Icon(Icons.account_balance_wallet_rounded)),
-                  ButtonSegment(value: 2, label: Text('Goals'), icon: Icon(Icons.star_rounded)),
+                  ButtonSegment(
+                    value: 0,
+                    label: Text('Strategy'),
+                    icon: Icon(Icons.insights_rounded),
+                  ),
+                  ButtonSegment(
+                    value: 1,
+                    label: Text('Budget'),
+                    icon: Icon(Icons.account_balance_wallet_rounded),
+                  ),
+                  ButtonSegment(
+                    value: 2,
+                    label: Text('Goals'),
+                    icon: Icon(Icons.star_rounded),
+                  ),
                 ],
                 selected: {_selectedIndex},
                 onSelectionChanged: (set) {
