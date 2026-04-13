@@ -11,12 +11,13 @@ class InvestmentGoalRepository extends BaseRepository<InvestmentGoal> {
   @override
   InvestmentGoal fromMap(Map<String, dynamic> map) => InvestmentGoal.fromMap(map);
 
-  Future<List<InvestmentGoal>> getAllGoalsWithCategory() async {
+  Future<List<InvestmentGoal>> getAllGoalsWithMetadata() async {
     final database = await db;
     final List<Map<String, Object?>> maps = await database.rawQuery('''
-      SELECT g.*, c.category_name, c.icon, c.icon_color
+      SELECT g.*, c.category_name, c.icon, c.icon_color, m.merchant_name
       FROM investment_goal g
       JOIN category c ON g.category_id = c.category_id
+      LEFT JOIN merchant m ON g.merchant_id = m.merchant_id
       ORDER BY g.created_time DESC
     ''');
     return maps.map((map) => fromMap(map)).toList();

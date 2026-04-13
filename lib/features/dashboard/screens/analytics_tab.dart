@@ -7,19 +7,21 @@ import '../../../core/utils/icon_helper.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/utils/color_helper.dart';
 import '../../../services/analytics_service.dart';
+import '../../../services/providers.dart';
 import '../../../services/sms_listener_service.dart';
 import '../../../widgets/glass_card.dart';
 import '../../../widgets/month_swiper.dart';
+import '../../labeling/screens/label_screen.dart';
 
 /// Analytics tab — visual charts (bar, pie) for expense breakdowns.
-class AnalyticsTab extends StatefulWidget {
+class AnalyticsTab extends ConsumerStatefulWidget {
   const AnalyticsTab({super.key});
 
   @override
-  State<AnalyticsTab> createState() => _AnalyticsTabState();
+  ConsumerState<AnalyticsTab> createState() => _AnalyticsTabState();
 }
 
-class _AnalyticsTabState extends State<AnalyticsTab> {
+class _AnalyticsTabState extends ConsumerState<AnalyticsTab> {
   final _analytics = AnalyticsService();
   bool _loading = true;
   
@@ -69,6 +71,7 @@ class _AnalyticsTabState extends State<AnalyticsTab> {
 
   @override
   Widget build(BuildContext context) {
+    final isDemo = ref.watch(demoModeProvider).valueOrNull ?? false;
     return Scaffold(
       body: MonthSwiper(
         currentMonth: _selectedMonth,
@@ -76,12 +79,12 @@ class _AnalyticsTabState extends State<AnalyticsTab> {
           setState(() => _selectedMonth = newMonth);
           _loadData();
         },
-        child: _buildContent(),
+        child: _buildContent(isDemo),
       ),
     );
   }
 
-  Widget _buildContent() {
+  Widget _buildContent(bool isDemo) {
     // Only show full-screen loader if no data exists and we are loading
     final hasNoData = _topCategories.isEmpty && _topMerchants.isEmpty && _topAccounts.isEmpty && _topCards.isEmpty && _topPurposes.isEmpty;
     if (_loading && hasNoData) return const Center(child: CircularProgressIndicator());
@@ -98,7 +101,10 @@ class _AnalyticsTabState extends State<AnalyticsTab> {
             title: 'Top Categories',
             items: _topCategories,
             nameKey: 'category_name',
+            idKey: 'category_id',
             limit: _limitCategories,
+            isDemo: isDemo,
+            onRowTap: (id) => Navigator.push(context, MaterialPageRoute(builder: (_) => LabelScreen(showBackButton: true, initialMonth: _selectedMonth.month, initialYear: _selectedMonth.year, initialNature: 'TRANSACTIONS', initialType: 'DEBIT', initialCategoryId: id))),
             onMore: _limitCategories < 20 ? () {
               setState(() => _limitCategories += 5);
               _loadData();
@@ -113,7 +119,10 @@ class _AnalyticsTabState extends State<AnalyticsTab> {
             title: 'Top Merchants',
             items: _topMerchants,
             nameKey: 'merchant_name',
+            idKey: 'merchant_id',
             limit: _limitMerchants,
+            isDemo: isDemo,
+            onRowTap: (id) => Navigator.push(context, MaterialPageRoute(builder: (_) => LabelScreen(showBackButton: true, initialMonth: _selectedMonth.month, initialYear: _selectedMonth.year, initialNature: 'TRANSACTIONS', initialType: 'DEBIT', initialMerchantId: id))),
             onMore: _limitMerchants < 20 ? () {
               setState(() => _limitMerchants += 5);
               _loadData();
@@ -128,7 +137,10 @@ class _AnalyticsTabState extends State<AnalyticsTab> {
             title: 'Top Accounts',
             items: _topAccounts,
             nameKey: 'account_name',
+            idKey: 'account_id',
             limit: _limitAccounts,
+            isDemo: isDemo,
+            onRowTap: (id) => Navigator.push(context, MaterialPageRoute(builder: (_) => LabelScreen(showBackButton: true, initialMonth: _selectedMonth.month, initialYear: _selectedMonth.year, initialNature: 'TRANSACTIONS', initialType: 'DEBIT', initialAccountId: id))),
             onMore: _limitAccounts < 20 ? () {
               setState(() => _limitAccounts += 5);
               _loadData();
@@ -143,7 +155,10 @@ class _AnalyticsTabState extends State<AnalyticsTab> {
             title: 'Top Cards',
             items: _topCards,
             nameKey: 'card_name',
+            idKey: 'card_id',
             limit: _limitCards,
+            isDemo: isDemo,
+            onRowTap: (id) => Navigator.push(context, MaterialPageRoute(builder: (_) => LabelScreen(showBackButton: true, initialMonth: _selectedMonth.month, initialYear: _selectedMonth.year, initialNature: 'TRANSACTIONS', initialType: 'DEBIT', initialCardId: id))),
             onMore: _limitCards < 20 ? () {
               setState(() => _limitCards += 5);
               _loadData();
@@ -159,6 +174,7 @@ class _AnalyticsTabState extends State<AnalyticsTab> {
             items: _topPurposes,
             nameKey: 'expense_for',
             limit: _limitPurposes,
+            isDemo: isDemo,
             onMore: _limitPurposes < 20 ? () {
               setState(() => _limitPurposes += 5);
               _loadData();
@@ -201,17 +217,23 @@ class _TopSection extends StatelessWidget {
   final String title;
   final List<Map<String, dynamic>> items;
   final String nameKey;
+  final String? idKey;
   final int limit;
+  final void Function(int)? onRowTap;
   final VoidCallback? onMore;
   final VoidCallback? onLess;
+  final bool isDemo;
 
   const _TopSection({
     required this.title,
     required this.items,
     required this.nameKey,
+    this.idKey,
     required this.limit,
+    this.onRowTap,
     this.onMore,
     this.onLess,
+    this.isDemo = false,
   });
 
   @override
@@ -276,7 +298,16 @@ class _TopSection extends StatelessWidget {
               final fraction = maxVal > 0 ? total / maxVal : 0.0;
               return Padding(
                 padding: const EdgeInsets.only(bottom: 10),
-                child: Row(
+                child: GestureDetector(
+                  onTap: () {
+                    if (ModalRoute.of(context)?.isCurrent == true) {
+                      if (onRowTap != null && idKey != null) {
+                        final id = item[idKey!] as int?;
+                        if (id != null) onRowTap!(id);
+                      }
+                    }
+                  },
+                  child: Row(
                   children: [
                     CircleAvatar(
                       radius: 16,
@@ -307,7 +338,9 @@ class _TopSection extends StatelessWidget {
                                 ),
                               ),
                               Text(
-                                '₹${total.toStringAsFixed(0)}',
+                                isDemo
+                                  ? '${(fraction * 100).toStringAsFixed(1)}%'
+                                  : '₹${total.toStringAsFixed(0)}',
                                 style: const TextStyle(
                                   fontSize: 13,
                                   fontWeight: FontWeight.w600,
@@ -330,6 +363,7 @@ class _TopSection extends StatelessWidget {
                       ),
                     ),
                   ],
+                ),
                 ),
               );
             }),

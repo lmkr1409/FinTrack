@@ -44,9 +44,28 @@ class TransactionRepository extends BaseRepository<Transaction> {
     String? orderBy,
     int? limit,
     int? goalId,
+    String? widgetKey,
   }) async {
     final conditions = <String>[];
     final args = <Object?>[];
+
+    if (widgetKey != null) {
+      final database = await db;
+      final filters = await database.query('widget_filter', where: 'widget_key = ?', whereArgs: [widgetKey]);
+      if (filters.isNotEmpty) {
+        final excludedCategories = filters.where((f) => f['filter_type'] == 'EXCLUDE' && f['target_type'] == 'CATEGORY').map((f) => f['target_id']).toList();
+        if (excludedCategories.isNotEmpty) conditions.add('category_id NOT IN (${excludedCategories.join(",")})');
+
+        final excludedSubcats = filters.where((f) => f['filter_type'] == 'EXCLUDE' && f['target_type'] == 'SUBCATEGORY').map((f) => f['target_id']).toList();
+        if (excludedSubcats.isNotEmpty) conditions.add('subcategory_id NOT IN (${excludedSubcats.join(",")})');
+
+        final includedCategories = filters.where((f) => f['filter_type'] == 'INCLUDE' && f['target_type'] == 'CATEGORY').map((f) => f['target_id']).toList();
+        if (includedCategories.isNotEmpty) conditions.add('category_id IN (${includedCategories.join(",")})');
+
+        final includedSubcats = filters.where((f) => f['filter_type'] == 'INCLUDE' && f['target_type'] == 'SUBCATEGORY').map((f) => f['target_id']).toList();
+        if (includedSubcats.isNotEmpty) conditions.add('subcategory_id IN (${includedSubcats.join(",")})');
+      }
+    }
 
     if (startDate != null) {
       conditions.add('transaction_date >= ?');

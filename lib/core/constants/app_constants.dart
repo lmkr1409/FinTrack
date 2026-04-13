@@ -7,5 +7,5 @@ class AppConstants {
 
   // Database
   static const String databaseName = 'fintrack.db';
-  static const int databaseVersion = 10;
+  static const int databaseVersion = 1;
 }

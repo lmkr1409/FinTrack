@@ -1,20 +1,22 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/theme/app_colors.dart';
 import '../../../core/utils/color_helper.dart';
 import '../../../core/utils/icon_helper.dart';
 import '../../../services/analytics_service.dart';
+import '../../../services/providers.dart';
 import '../../../widgets/glass_card.dart';
 
-class GoalsProgressTab extends StatefulWidget {
+class GoalsProgressTab extends ConsumerStatefulWidget {
   final DateTime selectedMonth;
   const GoalsProgressTab({super.key, required this.selectedMonth});
 
   @override
-  State<GoalsProgressTab> createState() => _GoalsProgressTabState();
+  ConsumerState<GoalsProgressTab> createState() => _GoalsProgressTabState();
 }
 
-class _GoalsProgressTabState extends State<GoalsProgressTab> {
+class _GoalsProgressTabState extends ConsumerState<GoalsProgressTab> {
   final _analytics = AnalyticsService();
   bool _loading = true;
   List<Map<String, dynamic>> _goalsData = [];
@@ -48,10 +50,11 @@ class _GoalsProgressTabState extends State<GoalsProgressTab> {
 
   @override
   Widget build(BuildContext context) {
-    return _buildContent();
+    final isDemo = ref.watch(demoModeProvider).valueOrNull ?? false;
+    return _buildContent(isDemo);
   }
 
-  Widget _buildContent() {
+  Widget _buildContent(bool isDemo) {
     if (_loading) return const Center(child: CircularProgressIndicator());
 
     if (_goalsData.isEmpty) {
@@ -132,10 +135,12 @@ class _GoalsProgressTabState extends State<GoalsProgressTab> {
                           color: isCompleted ? AppColors.income : Colors.amberAccent,
                         ),
                       ),
-                      Text(
-                        '₹${savedAmount.toStringAsFixed(0)} / ₹${targetAmount.toStringAsFixed(0)}',
-                        style: const TextStyle(fontWeight: FontWeight.w600),
-                      ),
+                      isDemo
+                        ? const Icon(Icons.visibility_off_rounded, size: 14, color: AppColors.textMuted)
+                        : Text(
+                            '₹${savedAmount.toStringAsFixed(0)} / ₹${targetAmount.toStringAsFixed(0)}',
+                            style: const TextStyle(fontWeight: FontWeight.w600),
+                          ),
                     ],
                   ),
                   const SizedBox(height: 8),

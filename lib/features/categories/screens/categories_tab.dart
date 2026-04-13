@@ -208,7 +208,7 @@ class _CategoriesTabState extends ConsumerState<CategoriesTab> {
 
     if (isEdit) {
       await repo.updateCategory(
-        category!.copyWith(
+        category.copyWith(
           categoryName: name,
           icon: iconCtrl.text.trim(),
           iconColor: colorCtrl.text.trim(),

@@ -33,19 +33,25 @@ class YearSwiper extends StatelessWidget {
           SafeArea(
             bottom: false,
             child: Padding(
-              padding: const EdgeInsets.fromLTRB(20, 16, 16, 8),
+              padding: const EdgeInsets.fromLTRB(20, 0, 16, 0),
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   Text(
                     'Year $currentYear',
                     style: const TextStyle(
-                      fontSize: 18,
+                      fontSize: 16,
                       fontWeight: FontWeight.bold,
                       color: Colors.white,
                     ),
                   ),
-                  if (actions != null) Row(children: actions!),
+                  if (actions != null) 
+                    Theme(
+                      data: Theme.of(context).copyWith(
+                        visualDensity: const VisualDensity(horizontal: -4, vertical: -4),
+                      ),
+                      child: Row(children: actions!),
+                    ),
                 ],
               ),
             ),

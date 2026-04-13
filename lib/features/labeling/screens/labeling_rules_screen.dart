@@ -24,6 +24,7 @@ class LabelingRulesScreen extends ConsumerStatefulWidget {
 }
 
 enum _RulesSegment { transactions, merchants }
+enum _MerchantNature { transactions, transfers, investments, common }
 
 class _LabelingRulesScreenState extends ConsumerState<LabelingRulesScreen> {
   _RulesSegment _segment = _RulesSegment.transactions;
@@ -285,6 +286,57 @@ class _LabelingRulesScreenState extends ConsumerState<LabelingRulesScreen> {
     );
   }
 
+  Widget _buildNatureSection(String title, _MerchantNature nature, IconData icon, Map<int?, List<MerchantRule>> merchants) {
+    if (merchants.isEmpty) return const SizedBox.shrink();
+
+    // Sort merchants alphabetically; "Unassigned" goes last
+    final sortedKeys = merchants.keys.toList()
+      ..sort((a, b) {
+        if (a == null) return 1;
+        if (b == null) return -1;
+        final nameA = _merchantMap[a]?.merchantName ?? '';
+        final nameB = _merchantMap[b]?.merchantName ?? '';
+        return nameA.compareTo(nameB);
+      });
+
+    return Theme(
+      data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+      child: ExpansionTile(
+        initiallyExpanded: nature == _MerchantNature.transactions, // Expand transactions by default if present
+        leading: Icon(icon, color: AppColors.primary),
+        title: Text(title, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+        children: sortedKeys.map((merchantId) {
+          final rules = merchants[merchantId]!;
+          final merchantName = merchantId != null && _merchantMap.containsKey(merchantId)
+              ? _merchantMap[merchantId]!.merchantName
+              : 'Unassigned';
+
+          return Card(
+            margin: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+            elevation: 0,
+            color: Theme.of(context).colorScheme.surfaceContainerHighest.withValues(alpha: 0.3),
+            clipBehavior: Clip.antiAlias,
+            child: Theme(
+              data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+              child: ExpansionTile(
+                leading: const Icon(Icons.store_rounded, color: AppColors.primary, size: 20),
+                title: Text(merchantName, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                subtitle: Text(
+                  '${rules.length} keyword${rules.length == 1 ? '' : 's'}',
+                  style: const TextStyle(fontSize: 11, color: AppColors.textMuted),
+                ),
+                initiallyExpanded: false,
+                childrenPadding: const EdgeInsets.only(bottom: 8),
+                children: rules.map(_buildMerchantKeywordCard).toList(),
+              ),
+            ),
+          );
+        }).toList(),
+      ),
+    );
+  }
+
   Widget _buildMerchantTab() {
     if (_mRules.isEmpty) {
       return RefreshIndicator(
@@ -299,56 +351,59 @@ class _LabelingRulesScreenState extends ConsumerState<LabelingRulesScreen> {
       );
     }
 
-    // Group rules by merchantId
-    final Map<int?, List<MerchantRule>> grouped = {};
+    // 1. Group rules by merchantId first
+    final Map<int?, List<MerchantRule>> merchantGroups = {};
     for (final rule in _mRules) {
-      grouped.putIfAbsent(rule.merchantId, () => []).add(rule);
+      merchantGroups.putIfAbsent(rule.merchantId, () => []).add(rule);
     }
 
-    // Sort merchants alphabetically; "Unassigned" goes last
-    final sortedKeys = grouped.keys.toList()
-      ..sort((a, b) {
-        if (a == null) return 1;
-        if (b == null) return -1;
-        final nameA = _merchantMap[a]?.merchantName ?? '';
-        final nameB = _merchantMap[b]?.merchantName ?? '';
-        return nameA.compareTo(nameB);
-      });
+    // 2. Classify each merchant into a nature
+    final Map<_MerchantNature, Map<int?, List<MerchantRule>>> natureGroups = {
+      _MerchantNature.transactions: {},
+      _MerchantNature.transfers: {},
+      _MerchantNature.investments: {},
+      _MerchantNature.common: {},
+    };
+
+    merchantGroups.forEach((merchantId, rules) {
+      final natures = rules.map((r) {
+        if (r.categoryId == null) return 'NONE';
+        return _categoryMap[r.categoryId]?.categoryType ?? 'NONE';
+      }).toSet();
+
+      _MerchantNature targetNature;
+      
+      // If merchant has rules in multiple natures, move to Common
+      if (natures.length > 1) {
+        targetNature = _MerchantNature.common;
+      } else if (natures.isEmpty || natures.first == 'NONE') {
+        targetNature = _MerchantNature.common;
+      } else {
+        final natureStr = natures.first;
+        if (natureStr == 'TRANSACTIONS') {
+          targetNature = _MerchantNature.transactions;
+        } else if (natureStr == 'TRANSFERS') {
+          targetNature = _MerchantNature.transfers;
+        } else if (natureStr == 'INVESTMENTS') {
+          targetNature = _MerchantNature.investments;
+        } else {
+          targetNature = _MerchantNature.common;
+        }
+      }
+
+      natureGroups[targetNature]![merchantId] = rules;
+    });
 
     return RefreshIndicator(
       onRefresh: _loadRules,
-      child: ListView.builder(
-        padding: const EdgeInsets.fromLTRB(12, 12, 12, 80),
-        itemCount: sortedKeys.length,
-        itemBuilder: (context, index) {
-          final merchantId = sortedKeys[index];
-          final rules = grouped[merchantId]!;
-          final merchantName = merchantId != null && _merchantMap.containsKey(merchantId)
-              ? _merchantMap[merchantId]!.merchantName
-              : 'Unassigned';
-
-          return Card(
-            margin: const EdgeInsets.only(bottom: 10),
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-            elevation: 0,
-            color: Theme.of(context).colorScheme.surfaceContainerHighest.withValues(alpha: 0.3),
-            clipBehavior: Clip.antiAlias,
-            child: Theme(
-              data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
-              child: ExpansionTile(
-                leading: const Icon(Icons.store_rounded, color: AppColors.primary),
-                title: Text(merchantName, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
-                subtitle: Text(
-                  '${rules.length} keyword${rules.length == 1 ? '' : 's'}',
-                  style: const TextStyle(fontSize: 11, color: AppColors.textMuted),
-                ),
-                initiallyExpanded: false,
-                childrenPadding: const EdgeInsets.only(bottom: 8),
-                children: rules.map(_buildMerchantKeywordCard).toList(),
-              ),
-            ),
-          );
-        },
+      child: ListView(
+        padding: const EdgeInsets.fromLTRB(0, 12, 0, 80),
+        children: [
+          _buildNatureSection('Transactions', _MerchantNature.transactions, Icons.receipt_long_rounded, natureGroups[_MerchantNature.transactions]!),
+          _buildNatureSection('Transfers', _MerchantNature.transfers, Icons.swap_horiz_rounded, natureGroups[_MerchantNature.transfers]!),
+          _buildNatureSection('Investments', _MerchantNature.investments, Icons.trending_up_rounded, natureGroups[_MerchantNature.investments]!),
+          _buildNatureSection('Common', _MerchantNature.common, Icons.category_rounded, natureGroups[_MerchantNature.common]!),
+        ],
       ),
     );
   }

@@ -95,11 +95,13 @@ CREATE TABLE IF NOT EXISTS investment_goal (
   category_id INTEGER NOT NULL,
   subcategory_id INTEGER,
   purpose_id INTEGER,
+  merchant_id INTEGER,
   created_time TEXT DEFAULT CURRENT_TIMESTAMP,
   updated_time TEXT DEFAULT CURRENT_TIMESTAMP,
   FOREIGN KEY (category_id) REFERENCES category(category_id) ON DELETE RESTRICT,
   FOREIGN KEY (subcategory_id) REFERENCES sub_category(subcategory_id) ON DELETE SET NULL,
-  FOREIGN KEY (purpose_id) REFERENCES expense_purpose(purpose_id) ON DELETE SET NULL
+  FOREIGN KEY (purpose_id) REFERENCES expense_purpose(purpose_id) ON DELETE SET NULL,
+  FOREIGN KEY (merchant_id) REFERENCES merchant(merchant_id) ON DELETE SET NULL
 );
 
 CREATE TABLE IF NOT EXISTS payment_method (
@@ -127,12 +129,14 @@ CREATE TABLE IF NOT EXISTS merchant_rule (
   category_id INTEGER,
   subcategory_id INTEGER,
   purpose_id INTEGER,
+  goal_id INTEGER,
   created_time TEXT DEFAULT CURRENT_TIMESTAMP,
   updated_time TEXT DEFAULT CURRENT_TIMESTAMP,
   FOREIGN KEY (merchant_id) REFERENCES merchant(merchant_id) ON DELETE SET NULL,
   FOREIGN KEY (category_id) REFERENCES category(category_id) ON DELETE SET NULL,
   FOREIGN KEY (subcategory_id) REFERENCES sub_category(subcategory_id) ON DELETE SET NULL,
-  FOREIGN KEY (purpose_id) REFERENCES expense_purpose(purpose_id) ON DELETE SET NULL
+  FOREIGN KEY (purpose_id) REFERENCES expense_purpose(purpose_id) ON DELETE SET NULL,
+  FOREIGN KEY (goal_id) REFERENCES investment_goal(goal_id) ON DELETE SET NULL
 );
 
 CREATE TABLE IF NOT EXISTS transaction_rule (

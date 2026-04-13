@@ -4,19 +4,21 @@ import 'package:intl/intl.dart';
 
 import '../../../core/theme/app_colors.dart';
 import '../../../services/analytics_service.dart';
+import '../../../services/providers.dart';
 import '../../../services/sms_listener_service.dart';
 import '../../../widgets/glass_card.dart';
 import '../../../widgets/month_swiper.dart';
+import '../../labeling/screens/label_screen.dart';
 
 /// Trends tab — 12-month aggregated insights and income vs expense chart.
-class TrendsTab extends StatefulWidget {
+class TrendsTab extends ConsumerStatefulWidget {
   const TrendsTab({super.key});
 
   @override
-  State<TrendsTab> createState() => _TrendsTabState();
+  ConsumerState<TrendsTab> createState() => _TrendsTabState();
 }
 
-class _TrendsTabState extends State<TrendsTab> {
+class _TrendsTabState extends ConsumerState<TrendsTab> {
   final _analytics = AnalyticsService();
   bool _loading = true;
   List<Map<String, dynamic>> _yearlyTrend = [];
@@ -69,19 +71,20 @@ class _TrendsTabState extends State<TrendsTab> {
 
   @override
   Widget build(BuildContext context) {
+    final isDemo = ref.watch(demoModeProvider).valueOrNull ?? false;
     return Scaffold(
       body: MonthSwiper(
         currentMonth: _selectedMonth,
         onMonthChanged: (newMonth) {
           setState(() => _selectedMonth = newMonth);
-          _loadData(); // Swiper will change context month, though 12 months is effectively relative to 'now' mostly. If we wanted it relative to selectedMonth, we'd need to pass it to AnalyticsService. But typical 'trends' focus is usually just the latest unless specified. For now we just refresh.
+          _loadData();
         },
-        child: _buildContent(),
+        child: _buildContent(isDemo),
       ),
     );
   }
 
-  Widget _buildContent() {
+  Widget _buildContent(bool isDemo) {
     if (_loading) return const Center(child: CircularProgressIndicator());
     return RefreshIndicator(
       onRefresh: _handleRefresh,
@@ -99,18 +102,18 @@ class _TrendsTabState extends State<TrendsTab> {
             physics: const NeverScrollableScrollPhysics(),
             childAspectRatio: 1.5,
             children: [
-              _MiniInsightCard(label: 'Avg Monthly Budget', value: '₹${_avgMonthlyBudget.toStringAsFixed(0)}', color: AppColors.primary, icon: Icons.account_balance_wallet_rounded),
-              _MiniInsightCard(label: 'Avg Monthly Spend', value: '₹${_avgMonthlySpending.toStringAsFixed(0)}', color: AppColors.expense, icon: Icons.money_off_rounded),
-              _MiniInsightCard(label: 'Avg Monthly Savings', value: '₹${_avgMonthlySavings.toStringAsFixed(0)}', color: AppColors.income, icon: Icons.savings_rounded),
+              _MiniInsightCard(label: 'Avg Monthly Budget', value: isDemo ? null : '₹${_avgMonthlyBudget.toStringAsFixed(0)}', color: AppColors.primary, icon: Icons.account_balance_wallet_rounded),
+              _MiniInsightCard(label: 'Avg Monthly Spend', value: isDemo ? null : '₹${_avgMonthlySpending.toStringAsFixed(0)}', color: AppColors.expense, icon: Icons.money_off_rounded),
+              _MiniInsightCard(label: 'Avg Monthly Savings', value: isDemo ? null : '₹${_avgMonthlySavings.toStringAsFixed(0)}', color: AppColors.income, icon: Icons.savings_rounded),
               _MiniInsightCard(label: 'Avg Utilization', value: '${_averageUtilization.toStringAsFixed(1)}%', color: AppColors.warning, icon: Icons.pie_chart_rounded),
               _MiniInsightCard(label: 'Over Budget Months', value: '$_overBudgetMonths / 12', color: AppColors.expense, icon: Icons.warning_amber_rounded),
               _MiniInsightCard(label: 'Savings Rate', value: '${_savingsRate.toStringAsFixed(1)}%', color: _savingsRate >= 0 ? AppColors.income : AppColors.expense, icon: Icons.percent_rounded),
             ],
           ),
           const SizedBox(height: 24),
-          _DualTrendSection(title: 'Last 12 Months (Income vs Expense)', data: _yearlyTrend),
+          _DualTrendSection(title: 'Last 12 Months (Income vs Expense)', data: _yearlyTrend, isDemo: isDemo),
           const SizedBox(height: 20),
-          _InvestmentTrendSection(data: _investmentTrend),
+          _InvestmentTrendSection(data: _investmentTrend, isDemo: isDemo),
         ],
       ),
     );
@@ -119,10 +122,10 @@ class _TrendsTabState extends State<TrendsTab> {
 
 class _MiniInsightCard extends StatelessWidget {
   final String label;
-  final String value;
+  final String? value; // null = demo mode hidden
   final Color color;
   final IconData icon;
-  const _MiniInsightCard({required this.label, required this.value, required this.color, required this.icon});
+  const _MiniInsightCard({required this.label, required this.color, required this.icon, this.value});
 
   @override
   Widget build(BuildContext context) {
@@ -141,7 +144,9 @@ class _MiniInsightCard extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 6),
-          Text(value, style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: color), maxLines: 1, overflow: TextOverflow.ellipsis),
+          value == null
+            ? Icon(Icons.visibility_off_rounded, size: 18, color: color.withValues(alpha: 0.6))
+            : Text(value!, style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: color), maxLines: 1, overflow: TextOverflow.ellipsis),
         ],
       ),
     );
@@ -151,7 +156,8 @@ class _MiniInsightCard extends StatelessWidget {
 class _DualTrendSection extends StatelessWidget {
   final String title;
   final List<Map<String, dynamic>> data;
-  const _DualTrendSection({required this.title, required this.data});
+  final bool isDemo;
+  const _DualTrendSection({required this.title, required this.data, this.isDemo = false});
 
   @override
   Widget build(BuildContext context) {
@@ -203,9 +209,21 @@ class _DualTrendSection extends StatelessWidget {
                 }
                 
                 return Expanded(
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 2.0),
-                    child: Column(
+                  child: GestureDetector(
+                    onTap: () {
+                      if (ModalRoute.of(context)?.isCurrent == true) {
+                        if (period.length >= 7) {
+                          final y = int.tryParse(period.substring(0, 4));
+                          final m = int.tryParse(period.substring(5, 7));
+                          if (y != null && m != null) {
+                            Navigator.push(context, MaterialPageRoute(builder: (_) => LabelScreen(showBackButton: true, initialYear: y, initialMonth: m)));
+                          }
+                        }
+                      }
+                    },
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 2.0),
+                      child: Column(
                       mainAxisAlignment: MainAxisAlignment.end,
                       children: [
                         Flexible(
@@ -217,7 +235,7 @@ class _DualTrendSection extends StatelessWidget {
                                 child: Column(
                                   mainAxisAlignment: MainAxisAlignment.end,
                                   children: [
-                                    Text(income > 0 ? '${(income / 1000).toStringAsFixed(0)}k' : '', style: const TextStyle(fontSize: 7, color: AppColors.textMuted), maxLines: 1),
+                                    Text(isDemo ? '' : (income > 0 ? '${(income / 1000).toStringAsFixed(0)}k' : ''), style: const TextStyle(fontSize: 7, color: AppColors.textMuted), maxLines: 1),
                                     const SizedBox(height: 2),
                                     Flexible(
                                       child: FractionallySizedBox(
@@ -240,7 +258,7 @@ class _DualTrendSection extends StatelessWidget {
                                 child: Column(
                                   mainAxisAlignment: MainAxisAlignment.end,
                                   children: [
-                                    Text(expense > 0 ? '${(expense / 1000).toStringAsFixed(0)}k' : '', style: const TextStyle(fontSize: 7, color: AppColors.textMuted), maxLines: 1),
+                                    Text(isDemo ? '' : (expense > 0 ? '${(expense / 1000).toStringAsFixed(0)}k' : ''), style: const TextStyle(fontSize: 7, color: AppColors.textMuted), maxLines: 1),
                                     const SizedBox(height: 2),
                                     Flexible(
                                       child: FractionallySizedBox(
@@ -265,6 +283,7 @@ class _DualTrendSection extends StatelessWidget {
                       ],
                     ),
                   ),
+                  ),
                 );
               }).toList(),
             ),
@@ -287,7 +306,8 @@ class _DualTrendSection extends StatelessWidget {
 
 class _InvestmentTrendSection extends StatelessWidget {
   final List<Map<String, dynamic>> data;
-  const _InvestmentTrendSection({required this.data});
+  final bool isDemo;
+  const _InvestmentTrendSection({required this.data, this.isDemo = false});
 
   @override
   Widget build(BuildContext context) {
@@ -315,10 +335,14 @@ class _InvestmentTrendSection extends StatelessWidget {
               Column(
                 crossAxisAlignment: CrossAxisAlignment.end,
                 children: [
-                  Text('?${total12m.toStringAsFixed(0)}',
-                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: Colors.amberAccent)),
-                  Text('avg ?${avgMonthly.toStringAsFixed(0)}/mo',
-                      style: const TextStyle(fontSize: 10, color: AppColors.textMuted)),
+                  isDemo
+                    ? const Icon(Icons.visibility_off_rounded, size: 12, color: Colors.amberAccent)
+                    : Text('?${total12m.toStringAsFixed(0)}',
+                        style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: Colors.amberAccent)),
+                  isDemo
+                    ? const Icon(Icons.visibility_off_rounded, size: 10, color: AppColors.textMuted)
+                    : Text('avg ?${avgMonthly.toStringAsFixed(0)}/mo',
+                        style: const TextStyle(fontSize: 10, color: AppColors.textMuted)),
                 ],
               ),
             ],
@@ -353,9 +377,21 @@ class _InvestmentTrendSection extends StatelessWidget {
                   }
 
                   return Expanded(
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 2.0),
-                      child: Column(
+                    child: GestureDetector(
+                      onTap: () {
+                        if (ModalRoute.of(context)?.isCurrent == true) {
+                          if (period.length >= 7) {
+                            final y = int.tryParse(period.substring(0, 4));
+                            final m = int.tryParse(period.substring(5, 7));
+                            if (y != null && m != null) {
+                              Navigator.push(context, MaterialPageRoute(builder: (_) => LabelScreen(showBackButton: true, initialYear: y, initialMonth: m, initialNature: 'INVESTMENTS')));
+                            }
+                          }
+                        }
+                      },
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 2.0),
+                        child: Column(
                         mainAxisAlignment: MainAxisAlignment.end,
                         children: [
                           if (netInv > 0)
@@ -391,6 +427,7 @@ class _InvestmentTrendSection extends StatelessWidget {
                               style: const TextStyle(fontSize: 10, color: AppColors.textMuted)),
                         ],
                       ),
+                    ),
                     ),
                   );
                 }).toList(),

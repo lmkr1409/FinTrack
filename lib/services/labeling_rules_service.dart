@@ -80,6 +80,9 @@ class LabelingRulesService {
         if (rule.categoryId != null) catId = rule.categoryId;
         if (rule.subcategoryId != null) subCatId = rule.subcategoryId;
         if (rule.purposeId != null) purposeId = rule.purposeId;
+        if (rule.goalId != null) {
+          txn = txn.copyWith(goalId: rule.goalId);
+        }
         matched = true;
         break;
       }
@@ -111,6 +114,7 @@ class LabelingRulesService {
         purposeId: purposeId,
         accountId: accountId,
         cardId: cardId,
+        goalId: txn.goalId,
         isAutoLabeled: isComplete,
         labeled: false,
       );
@@ -123,7 +127,7 @@ class LabelingRulesService {
   static Future<void> promptAndApplyRules(BuildContext context, WidgetRef ref, {bool applyTransactions = true, bool applyMerchants = true}) async {
     final title = applyTransactions && applyMerchants 
         ? 'Apply All Rules'
-        : (applyTransactions ? 'Apply Transaction Rules' : 'Apply Merchant Rules');
+        : (applyTransactions ? 'Apply Transaction Rules' : 'Apply Merchant/Platform Rules');
 
     final override = await showDialog<bool>(
       context: context,
@@ -131,7 +135,7 @@ class LabelingRulesService {
         title: Text(title),
         content: const Text(
           'Do you want to update all unlabeled transactions, or only fill in their missing details?\n\n'
-          '• Update All: Replaces existing categories, merchants, etc. if a matching rule defines them.\n'
+          '• Update All: Replaces existing categories, merchants/platforms, etc. if a matching rule defines them.\n'
           '• Fill Missing: Only updates fields that are currently empty.'
         ),
         actions: [
@@ -225,6 +229,7 @@ class LabelingRulesService {
       int? newPurposeId = txn.purposeId;
       int? newAccountId = txn.accountId;
       int? newCardId = txn.cardId;
+      int? newGoalId = txn.goalId;
 
       if (applyTransactions) {
         // 1. Transaction Rules
@@ -307,6 +312,7 @@ class LabelingRulesService {
             if (rule.categoryId != null && (override || newCatId == null)) newCatId = rule.categoryId;
             if (rule.subcategoryId != null && (override || newSubCatId == null)) newSubCatId = rule.subcategoryId;
             if (rule.purposeId != null && (override || newPurposeId == null)) newPurposeId = rule.purposeId;
+            if (rule.goalId != null && (override || newGoalId == null)) newGoalId = rule.goalId;
             matchedOne = true;
             break;
           }
@@ -325,7 +331,8 @@ class LabelingRulesService {
                      (newSourceId != currentTxn.expenseSourceId) ||
                      (newPurposeId != currentTxn.purposeId) ||
                      (newAccountId != currentTxn.accountId) ||
-                     (newCardId != currentTxn.cardId);
+                     (newCardId != currentTxn.cardId) ||
+                     (newGoalId != currentTxn.goalId);
 
       if (changed) {
          currentTxn = currentTxn.copyWith(
@@ -339,6 +346,7 @@ class LabelingRulesService {
            purposeId: newPurposeId,
            accountId: newAccountId,
            cardId: newCardId,
+           goalId: newGoalId,
          );
       }
       

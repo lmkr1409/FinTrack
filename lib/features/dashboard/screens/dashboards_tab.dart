@@ -6,26 +6,29 @@ import 'package:fl_chart/fl_chart.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/utils/color_helper.dart';
 import '../../../services/analytics_service.dart';
+import '../../../services/providers.dart';
 import '../../../services/sms_listener_service.dart';
+import '../../../widgets/demo_value.dart';
 import '../../../widgets/glass_card.dart';
 import '../../../widgets/month_swiper.dart';
+import '../../labeling/screens/label_screen.dart';
 
 /// Dashboards tab — monthly summary with gradient header and glassmorphic cards.
-class DashboardsTab extends StatefulWidget {
+class DashboardsTab extends ConsumerStatefulWidget {
   const DashboardsTab({super.key});
 
   @override
-  State<DashboardsTab> createState() => _DashboardsTabState();
+  ConsumerState<DashboardsTab> createState() => _DashboardsTabState();
 }
 
 enum PieChartGrouping { category, paymentMethod, account, card, purpose }
 
-class _DashboardsTabState extends State<DashboardsTab> {
+class _DashboardsTabState extends ConsumerState<DashboardsTab> {
   final _analytics = AnalyticsService();
   bool _loading = true;
-  double _totalIncome = 0;
-  double _totalExpense = 0;
-  int _transactionCount = 0;
+  double _totalIncome = 0; // Flow Inflow
+  double _totalOutflow = 0; // Flow Outflow
+  double _totalExpense = 0; // Spending Insights Total
   double _dailySpend = 0;
   double _largestExpense = 0;
   double _spendingTrend = 0;
@@ -70,10 +73,21 @@ class _DashboardsTabState extends State<DashboardsTab> {
       'yyyy-MM-dd',
     ).format(DateTime(_selectedMonth.year, _selectedMonth.month, 0));
 
-    final income = await _analytics.totalByNatureAndType('TRANSACTIONS', 'CREDIT', start, end, widgetKey: 'financial_summary');
-    final expense = await _analytics.totalByNatureAndType('TRANSACTIONS', 'DEBIT', start, end, widgetKey: 'financial_summary');
-    final tCount = await _analytics.transactionCount(start, end, widgetKey: 'financial_summary');
-    final maxExp = await _analytics.largestExpense(start, end, widgetKey: 'financial_summary');
+    // Fetch Flow Data (Inflow/Outflow)
+    // For inflow, we use a custom method or just getIncomeAllocation's result
+    final flowAllocation = await _analytics.getIncomeAllocation(
+      start: DateTime(_selectedMonth.year, _selectedMonth.month, 1),
+      end: DateTime(_selectedMonth.year, _selectedMonth.month + 1, 0, 23, 59, 59),
+      widgetKey: 'financial_flow',
+    );
+    final inflow = flowAllocation['income'] ?? 0.0;
+    final outflow = flowAllocation['expenses'] ?? 0.0;
+
+    // Fetch Spending Insights Data
+    final expense = await _analytics.totalByNatureAndType('TRANSACTIONS', 'DEBIT', start, end, widgetKey: 'spending_insights');
+    final maxExp = await _analytics.largestExpense(start, end, widgetKey: 'spending_insights');
+    
+    // Fetch Allocation (for the bar chart at bottom)
     final allocation = await _analytics.getIncomeAllocation(
       start: DateTime(_selectedMonth.year, _selectedMonth.month, 1),
       end: DateTime(_selectedMonth.year, _selectedMonth.month + 1, 0, 23, 59, 59),
@@ -106,7 +120,7 @@ class _DashboardsTabState extends State<DashboardsTab> {
       'DEBIT',
       prevMonthStart,
       prevMonthEnd,
-      widgetKey: 'financial_summary',
+      widgetKey: 'spending_insights',
     );
     final now = DateTime.now();
     final daysToDivide =
@@ -147,9 +161,9 @@ class _DashboardsTabState extends State<DashboardsTab> {
     }
 
     setState(() {
-      _totalIncome = income;
+      _totalIncome = inflow;
+      _totalOutflow = outflow;
       _totalExpense = expense;
-      _transactionCount = tCount;
       _largestExpense = maxExp;
       _dailySpend = dSpend;
       _spendingTrend = trend.abs();
@@ -168,6 +182,7 @@ class _DashboardsTabState extends State<DashboardsTab> {
 
   @override
   Widget build(BuildContext context) {
+    final isDemo = ref.watch(demoModeProvider).valueOrNull ?? false;
     return Scaffold(
       body: MonthSwiper(
         currentMonth: _selectedMonth,
@@ -175,17 +190,20 @@ class _DashboardsTabState extends State<DashboardsTab> {
           setState(() => _selectedMonth = newMonth);
           _loadData();
         },
-        child: _buildContent(),
+        actions: [
+          _DemoToggleButton(isDemo: isDemo, onToggle: () => ref.read(demoModeProvider.notifier).toggle()),
+        ],
+        child: _buildContent(isDemo),
       ),
     );
   }
 
-  Widget _buildContent() {
+  Widget _buildContent(bool isDemo) {
     // Only show full screen loader if no data exists and we are loading
     final hasNoData = _totalIncome == 0 && _totalExpense == 0 && _dailyTrend.isEmpty;
     if (_loading && hasNoData) return const Center(child: CircularProgressIndicator());
     
-    final net = _totalIncome - _totalExpense;
+    final net = _totalIncome - _totalOutflow;
 
     return Stack(
       children: [
@@ -214,20 +232,28 @@ class _DashboardsTabState extends State<DashboardsTab> {
                   style: const TextStyle(color: Colors.white70, fontSize: 14),
                 ),
                 const SizedBox(height: 4),
-                Text(
-                  '₹${net.toStringAsFixed(2)}',
+                DemoValue(
+                  rawText: '₹${net.toStringAsFixed(2)}',
                   style: const TextStyle(
                     fontSize: 32,
                     fontWeight: FontWeight.bold,
                     color: Colors.white,
                   ),
+                  iconColor: Colors.white70,
                 ),
               ],
             ),
           ),
           const SizedBox(height: 16),
 
-          // ─── Summary cards ────────────────────────────
+          // ─── Financial Flow ────────────────────────────
+          const Padding(
+            padding: EdgeInsets.symmetric(vertical: 8),
+            child: Text(
+              'Financial Flow',
+              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: AppColors.textSecondary),
+            ),
+          ),
           GridView.count(
             crossAxisCount: 2,
             crossAxisSpacing: 8,
@@ -237,56 +263,109 @@ class _DashboardsTabState extends State<DashboardsTab> {
             childAspectRatio: 1.8,
             children: [
               _MiniInsightCard(
-                label: 'Total Expense',
-                value: '₹${_totalExpense.toStringAsFixed(0)}',
-                color: AppColors.expense,
-                icon: Icons.arrow_upward_rounded,
-              ),
-              _MiniInsightCard(
-                label: 'Total Income',
-                value: '₹${_totalIncome.toStringAsFixed(0)}',
+                label: 'Inflow',
+                value: isDemo ? null : '₹${_totalIncome.toStringAsFixed(0)}',
                 color: AppColors.income,
                 icon: Icons.arrow_downward_rounded,
+                onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => LabelScreen(showBackButton: true, initialMonth: _selectedMonth.month, initialYear: _selectedMonth.year, initialNature: 'TRANSACTIONS', initialType: 'CREDIT', initialWidgetKey: 'financial_flow'))),
               ),
               _MiniInsightCard(
-                label: 'No of Txns',
-                value: '$_transactionCount',
-                color: AppColors.info,
+                label: 'Outflow',
+                value: isDemo ? null : '₹${_totalOutflow.toStringAsFixed(0)}',
+                color: AppColors.expense,
+                icon: Icons.arrow_upward_rounded,
+                onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => LabelScreen(showBackButton: true, initialMonth: _selectedMonth.month, initialYear: _selectedMonth.year, initialNature: 'TRANSACTIONS', initialType: 'DEBIT', initialWidgetKey: 'financial_flow'))),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+
+          // ─── Spending Insights ────────────────────────────
+          const Padding(
+            padding: EdgeInsets.symmetric(vertical: 8),
+            child: Text(
+              'Spending Insights',
+              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: AppColors.textSecondary),
+            ),
+          ),
+          GridView.count(
+            crossAxisCount: 2,
+            crossAxisSpacing: 8,
+            mainAxisSpacing: 8,
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            childAspectRatio: 1.8,
+            children: [
+              _MiniInsightCard(
+                label: 'Total Expenses',
+                value: isDemo ? null : '₹${_totalExpense.toStringAsFixed(0)}',
+                color: AppColors.expense,
                 icon: Icons.receipt_long_rounded,
+                onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => LabelScreen(showBackButton: true, initialMonth: _selectedMonth.month, initialYear: _selectedMonth.year, initialNature: 'TRANSACTIONS', initialType: 'DEBIT', initialWidgetKey: 'spending_insights'))),
               ),
               _MiniInsightCard(
                 label: 'Daily Spend',
-                value: '₹${_dailySpend.toStringAsFixed(0)}',
+                value: isDemo ? null : '₹${_dailySpend.toStringAsFixed(0)}',
                 color: AppColors.warning,
                 icon: Icons.today_rounded,
+                onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => LabelScreen(showBackButton: true, initialMonth: _selectedMonth.month, initialYear: _selectedMonth.year, initialNature: 'TRANSACTIONS', initialType: 'DEBIT', initialWidgetKey: 'spending_insights'))),
               ),
               _MiniInsightCard(
                 label: 'Spending Trend',
-                value:
-                    '${_isSpendingUp ? '+' : '-'}${_spendingTrend.toStringAsFixed(1)}%',
+                value: '${_isSpendingUp ? '+' : '-'}${_spendingTrend.toStringAsFixed(1)}%',
                 color: _isSpendingUp ? AppColors.expense : AppColors.income,
                 icon: _isSpendingUp
                     ? Icons.trending_up_rounded
                     : Icons.trending_down_rounded,
                 subLabel: 'vs last month',
+                onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => LabelScreen(showBackButton: true, initialMonth: _selectedMonth.month, initialYear: _selectedMonth.year, initialNature: 'TRANSACTIONS', initialType: 'DEBIT', initialWidgetKey: 'spending_insights'))),
               ),
               _MiniInsightCard(
                 label: 'Largest Expense',
-                value: '₹${_largestExpense.toStringAsFixed(0)}',
+                value: isDemo ? null : '₹${_largestExpense.toStringAsFixed(0)}',
                 color: AppColors.secondary,
                 icon: Icons.monetization_on_rounded,
+                onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => LabelScreen(showBackButton: true, initialMonth: _selectedMonth.month, initialYear: _selectedMonth.year, initialNature: 'TRANSACTIONS', initialType: 'DEBIT', initialSort: 'amount DESC', initialLimit: 1, initialWidgetKey: 'spending_insights'))),
               ),
             ],
           ),
           const SizedBox(height: 24),
 
-          _CalendarSection(title: 'Daily Expenses', data: _dailyTrend, selectedMonth: _selectedMonth),
+          _CalendarSection(
+            title: 'Daily Expenses', 
+            data: _dailyTrend, 
+            selectedMonth: _selectedMonth,
+            isDemo: isDemo,
+            onDayTap: (day) {
+              final dateStr = '${_selectedMonth.year}-${_selectedMonth.month.toString().padLeft(2, '0')}-${day.toString().padLeft(2, '0')}';
+              Navigator.push(context, MaterialPageRoute(builder: (_) => LabelScreen(
+                showBackButton: true,
+                initialStartDate: '${dateStr}T00:00:00',
+                initialEndDate: '${dateStr}T23:59:59',
+                initialNature: 'TRANSACTIONS',
+                initialType: 'DEBIT',
+                initialWidgetKey: 'daily_heatmap',
+              )));
+            },
+          ),
           const SizedBox(height: 20),
           _DynamicPieChartSection(
             grouping: _pieChartGrouping,
             selectedCategoryId: _selectedCategoryId,
             categoryList: _categoryList,
             data: _pieChartData,
+            isDemo: isDemo,
+            onSliceTap: _pieChartGrouping == PieChartGrouping.category ? (id) {
+              if (ModalRoute.of(context)?.isCurrent == true) {
+                Navigator.push(context, MaterialPageRoute(builder: (_) => LabelScreen(
+                  showBackButton: true,
+                  initialMonth: _selectedMonth.month,
+                  initialYear: _selectedMonth.year,
+                  initialCategoryId: id,
+                  initialWidgetKey: 'expense_breakdown',
+                )));
+              }
+            } : null,
             onGroupingChanged: (val) {
               setState(() {
                 _pieChartGrouping = val;
@@ -301,10 +380,10 @@ class _DashboardsTabState extends State<DashboardsTab> {
           ),
           const SizedBox(height: 20),
 
-          _buildIncomeAllocation(),
+          _buildIncomeAllocation(isDemo),
           const SizedBox(height: 16),
 
-          _buildInvestmentPieChart(),
+          _buildInvestmentPieChart(isDemo),
           const SizedBox(height: 16),
         ],
       ),
@@ -333,7 +412,7 @@ class _DashboardsTabState extends State<DashboardsTab> {
   );
   }
 
-  Widget _buildIncomeAllocation() {
+  Widget _buildIncomeAllocation(bool isDemo) {
     final income = _allocation['income'] ?? 0.0;
     final exp = _allocation['expenses'] ?? 0.0;
     final inv = _allocation['investments'] ?? 0.0;
@@ -351,14 +430,50 @@ class _DashboardsTabState extends State<DashboardsTab> {
     final invPct = totalAllocated > 0 ? inv / totalAllocated : 0.0;
     final savPct = totalAllocated > 0 ? savings / totalAllocated : 0.0;
 
+    void goToExpenses() {
+      if (ModalRoute.of(context)?.isCurrent == true) {
+        Navigator.push(context, MaterialPageRoute(builder: (_) => LabelScreen(
+          showBackButton: true,
+          initialMonth: _selectedMonth.month,
+          initialYear: _selectedMonth.year,
+          initialNature: 'TRANSACTIONS',
+          initialType: 'DEBIT',
+          initialWidgetKey: 'income_allocation',
+        )));
+      }
+    }
+    void goToInvestments() {
+      if (ModalRoute.of(context)?.isCurrent == true) {
+        Navigator.push(context, MaterialPageRoute(builder: (_) => LabelScreen(
+          showBackButton: true,
+          initialMonth: _selectedMonth.month,
+          initialYear: _selectedMonth.year,
+          initialNature: 'INVESTMENTS',
+        )));
+      }
+    }
+    void goToIncome() {
+      if (ModalRoute.of(context)?.isCurrent == true) {
+        Navigator.push(context, MaterialPageRoute(builder: (_) => LabelScreen(
+          showBackButton: true,
+          initialMonth: _selectedMonth.month,
+          initialYear: _selectedMonth.year,
+          initialNature: 'TRANSACTIONS',
+          initialType: 'CREDIT',
+        )));
+      }
+    }
+
     return GlassCard(
       margin: EdgeInsets.zero,
       padding: const EdgeInsets.all(16),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Header row
-          Row(
+        // Header row — tap to see all income
+        GestureDetector(
+          onTap: goToIncome,
+          child: Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               Column(
@@ -377,90 +492,109 @@ class _DashboardsTabState extends State<DashboardsTab> {
               ),
               Row(
                 children: [
-                  Text(
-                    '₹${income.toStringAsFixed(0)}',
-                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: AppColors.textSecondary),
-                  ),
+                  isDemo
+                    ? const Icon(Icons.visibility_off_rounded, size: 14, color: AppColors.textMuted)
+                    : Text(
+                        '₹${income.toStringAsFixed(0)}',
+                        style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: AppColors.textSecondary),
+                      ),
                   const SizedBox(width: 4),
-                  const Icon(
-                    Icons.settings_suggest_rounded,
-                    size: 18,
-                    color: AppColors.textMuted,
-                  ),
+                  const Icon(Icons.settings_suggest_rounded, size: 18, color: AppColors.textMuted),
                 ],
               ),
             ],
           ),
-          if (overspent) ...[
-            const SizedBox(height: 8),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-              decoration: BoxDecoration(
-                color: AppColors.expense.withValues(alpha: 0.1),
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: AppColors.expense.withValues(alpha: 0.3)),
-              ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(Icons.warning_amber_rounded, size: 14, color: AppColors.expense),
-                  const SizedBox(width: 6),
-                  Text(
-                    'Overspent by ₹${(exp + inv - income).toStringAsFixed(0)}',
-                    style: TextStyle(fontSize: 11, color: AppColors.expense, fontWeight: FontWeight.bold),
-                  ),
-                ],
-              ),
+        ),
+        if (overspent) ...[
+          const SizedBox(height: 8),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+            decoration: BoxDecoration(
+              color: AppColors.expense.withValues(alpha: 0.1),
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: AppColors.expense.withValues(alpha: 0.3)),
             ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(Icons.warning_amber_rounded, size: 14, color: AppColors.expense),
+                const SizedBox(width: 6),
+                isDemo
+                  ? const Icon(Icons.visibility_off_rounded, size: 12, color: AppColors.expense)
+                  : Text(
+                      'Overspent by ₹${(exp + inv - income).toStringAsFixed(0)}',
+                      style: TextStyle(fontSize: 11, color: AppColors.expense, fontWeight: FontWeight.bold),
+                    ),
+              ],
+            ),
+          ),
+        ],
+        const SizedBox(height: 12),
+        // Allocation bar — each segment is individually tappable
+        ClipRRect(
+          borderRadius: BorderRadius.circular(8),
+          child: SizedBox(
+            height: 16,
+            child: Row(
+              children: [
+                if (expPct > 0) Expanded(
+                  flex: (expPct * 100).toInt().clamp(1, 100),
+                  child: GestureDetector(onTap: goToExpenses, child: Container(color: AppColors.expense)),
+                ),
+                if (invPct > 0) Expanded(
+                  flex: (invPct * 100).toInt().clamp(1, 100),
+                  child: GestureDetector(onTap: goToInvestments, child: Container(color: Colors.amberAccent)),
+                ),
+                if (savPct > 0) Expanded(
+                  flex: (savPct * 100).toInt().clamp(1, 100),
+                  child: Container(color: AppColors.income),
+                ),
+              ],
+            ),
+          ),
+        ),
+        const SizedBox(height: 16),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            _buildAllocationLegend(AppColors.expense, 'Expenses', exp, expPct, isDemo: isDemo, onTap: goToExpenses),
+            _buildAllocationLegend(Colors.amberAccent, 'Invested', inv, invPct, isDemo: isDemo, onTap: goToInvestments),
+            _buildAllocationLegend(AppColors.income, 'Savings', savings, savPct, isDemo: isDemo),
           ],
-          const SizedBox(height: 12),
-          // Allocation bar
-          ClipRRect(
-            borderRadius: BorderRadius.circular(8),
-            child: SizedBox(
-              height: 12,
-              child: Row(
-                children: [
-                  if (expPct > 0) Expanded(flex: (expPct * 100).toInt().clamp(1, 100), child: Container(color: AppColors.expense)),
-                  if (invPct > 0) Expanded(flex: (invPct * 100).toInt().clamp(1, 100), child: Container(color: Colors.amberAccent)),
-                  if (savPct > 0) Expanded(flex: (savPct * 100).toInt().clamp(1, 100), child: Container(color: AppColors.income)),
-                ],
-              ),
-            ),
-          ),
-          const SizedBox(height: 16),
+        ),
+      ],
+    ),
+  );
+  }
+
+  Widget _buildAllocationLegend(Color color, String label, double amount, double pct, {bool isDemo = false, VoidCallback? onTap}) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
           Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              _buildAllocationLegend(AppColors.expense, 'Expenses', exp, expPct),
-              _buildAllocationLegend(Colors.amberAccent, 'Invested', inv, invPct),
-              _buildAllocationLegend(AppColors.income, 'Savings', savings, savPct),
+              Container(width: 8, height: 8, decoration: BoxDecoration(color: color, shape: BoxShape.circle)),
+              const SizedBox(width: 6),
+              Text(label, style: const TextStyle(fontSize: 11, color: AppColors.textSecondary, fontWeight: FontWeight.bold)),
+              if (onTap != null) ...[
+                const SizedBox(width: 4),
+                Icon(Icons.arrow_forward_ios_rounded, size: 9, color: color),
+              ],
             ],
           ),
+          const SizedBox(height: 2),
+          isDemo
+            ? const Icon(Icons.visibility_off_rounded, size: 12, color: AppColors.textMuted)
+            : Text('₹${amount.toStringAsFixed(0)}', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+          Text('${(pct * 100).toStringAsFixed(1)}%', style: const TextStyle(fontSize: 10, color: AppColors.textMuted)),
         ],
       ),
     );
   }
 
-  Widget _buildAllocationLegend(Color color, String label, double amount, double pct) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
-          children: [
-            Container(width: 8, height: 8, decoration: BoxDecoration(color: color, shape: BoxShape.circle)),
-            const SizedBox(width: 6),
-            Text(label, style: const TextStyle(fontSize: 11, color: AppColors.textSecondary, fontWeight: FontWeight.bold)),
-          ],
-        ),
-        const SizedBox(height: 2),
-        Text('₹${amount.toStringAsFixed(0)}', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
-        Text('${(pct * 100).toStringAsFixed(1)}%', style: const TextStyle(fontSize: 10, color: AppColors.textMuted)),
-      ],
-    );
-  }
-
-  Widget _buildInvestmentPieChart() {
+  Widget _buildInvestmentPieChart(bool isDemo) {
     if (_investmentPieData.isEmpty) return const SizedBox.shrink();
 
     final total = _investmentPieData.fold<double>(
@@ -481,10 +615,12 @@ class _DashboardsTabState extends State<DashboardsTab> {
                 'Investments Breakdown',
                 style: TextStyle(fontWeight: FontWeight.bold, color: AppColors.primary, fontSize: 14),
               ),
-              Text(
-                '₹${total.toStringAsFixed(0)}',
-                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: Colors.amberAccent),
-              ),
+              isDemo
+                ? const Icon(Icons.visibility_off_rounded, size: 14, color: Colors.amberAccent)
+                : Text(
+                    '₹${total.toStringAsFixed(0)}',
+                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: Colors.amberAccent),
+                  ),
             ],
           ),
           const SizedBox(height: 16),
@@ -495,6 +631,27 @@ class _DashboardsTabState extends State<DashboardsTab> {
                 width: 120,
                 child: PieChart(
                   PieChartData(
+                    pieTouchData: PieTouchData(
+                      touchCallback: (FlTouchEvent event, pieTouchResponse) {
+                        if (!event.isInterestedForInteractions || pieTouchResponse == null || pieTouchResponse.touchedSection == null) return;
+                        final idx = pieTouchResponse.touchedSection!.touchedSectionIndex;
+                        if (idx >= 0 && idx < _investmentPieData.length) {
+                          final catId = _investmentPieData[idx]['id'] as int?;
+                          if (catId != null) {
+                            if (ModalRoute.of(context)?.isCurrent == true) {
+                            Navigator.push(context, MaterialPageRoute(builder: (_) => LabelScreen(
+                              showBackButton: true,
+                              initialMonth: _selectedMonth.month,
+                              initialYear: _selectedMonth.year,
+                              initialNature: 'INVESTMENTS',
+                              initialCategoryId: catId,
+                              initialWidgetKey: 'investment_breakdown',
+                            )));
+                            }
+                          }
+                        }
+                      },
+                    ),
                     sectionsSpace: 2,
                     centerSpaceRadius: 30,
                     sections: _investmentPieData.map((item) {
@@ -539,8 +696,11 @@ class _DashboardsTabState extends State<DashboardsTab> {
                           Column(
                             crossAxisAlignment: CrossAxisAlignment.end,
                             children: [
-                              Text('₹${value.toStringAsFixed(0)}',
-                                style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: AppColors.textPrimary)),
+                              isDemo
+                                ? Text('${pct.toStringAsFixed(1)}%',
+                                    style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: AppColors.textPrimary))
+                                : Text('₹${value.toStringAsFixed(0)}',
+                                    style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: AppColors.textPrimary)),
                               Text('${pct.toStringAsFixed(1)}%',
                                 style: const TextStyle(fontSize: 10, color: AppColors.textMuted)),
                             ],
@@ -561,23 +721,31 @@ class _DashboardsTabState extends State<DashboardsTab> {
 
 class _MiniInsightCard extends StatelessWidget {
   final String label;
-  final String value;
+  final String? value; // null = demo mode hidden
   final Color color;
   final IconData icon;
   final String? subLabel;
+  final VoidCallback? onTap;
   const _MiniInsightCard({
     required this.label,
-    required this.value,
     required this.color,
     required this.icon,
+    this.value,
     this.subLabel,
+    this.onTap,
   });
 
   @override
   Widget build(BuildContext context) {
-    return GlassCard(
-      margin: EdgeInsets.zero,
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+    return GestureDetector(
+      onTap: () {
+        if (ModalRoute.of(context)?.isCurrent == true) {
+          if (onTap != null) onTap!();
+        }
+      },
+      child: GlassCard(
+        margin: EdgeInsets.zero,
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         mainAxisAlignment: MainAxisAlignment.center,
@@ -600,16 +768,18 @@ class _MiniInsightCard extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 4),
-          Text(
-            value,
-            style: TextStyle(
-              fontSize: 16,
-              fontWeight: FontWeight.bold,
-              color: color,
-            ),
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-          ),
+          value == null
+            ? Icon(Icons.visibility_off_rounded, size: 18, color: color.withValues(alpha: 0.6))
+            : Text(
+                value!,
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
+                  color: color,
+                ),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
           if (subLabel != null) ...[
             const SizedBox(height: 2),
             Text(
@@ -619,7 +789,7 @@ class _MiniInsightCard extends StatelessWidget {
           ],
         ],
       ),
-    );
+    ));
   }
 }
 
@@ -628,8 +798,10 @@ class _CalendarSection extends StatelessWidget {
   final String title;
   final List<Map<String, dynamic>> data;
   final DateTime selectedMonth;
+  final void Function(int day)? onDayTap;
+  final bool isDemo;
 
-  const _CalendarSection({required this.title, required this.data, required this.selectedMonth});
+  const _CalendarSection({required this.title, required this.data, required this.selectedMonth, this.onDayTap, this.isDemo = false});
 
   @override
   Widget build(BuildContext context) {
@@ -722,39 +894,49 @@ class _CalendarSection extends StatelessWidget {
                 }
               }
 
-              return Container(
-                decoration: BoxDecoration(
-                  color: cellColor,
-                  borderRadius: BorderRadius.circular(6),
-                  border: isToday && amount == 0 
-                    ? Border.all(color: AppColors.primary.withValues(alpha: 0.5), width: 1.5) 
-                    : null,
-                ),
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Text(
-                      day.toString(),
-                      style: TextStyle(
-                        fontSize: 13, 
-                        fontWeight: isToday ? FontWeight.bold : FontWeight.w500,
-                        color: textColor,
-                      ),
-                    ),
-                    if (amount > 0) ...[
-                      const SizedBox(height: 2),
-                      FittedBox(
-                        fit: BoxFit.scaleDown,
-                        child: Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 2.0),
-                          child: Text(
-                            amount >= 1000 ? '${(amount / 1000).toStringAsFixed(1)}k' : amount.toStringAsFixed(0),
-                            style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: amountColor),
-                          ),
+              return GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onTap: () {
+                  if (ModalRoute.of(context)?.isCurrent == true) {
+                    if (onDayTap != null) onDayTap!(day);
+                  }
+                },
+                child: Container(
+                  decoration: BoxDecoration(
+                    color: cellColor,
+                    borderRadius: BorderRadius.circular(6),
+                    border: isToday && amount == 0 
+                      ? Border.all(color: AppColors.primary.withValues(alpha: 0.5), width: 1.5) 
+                      : null,
+                  ),
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Text(
+                        day.toString(),
+                        style: TextStyle(
+                          fontSize: 13, 
+                          fontWeight: isToday ? FontWeight.bold : FontWeight.w500,
+                          color: textColor,
                         ),
                       ),
-                    ]
-                  ],
+                      if (amount > 0) ...[
+                        const SizedBox(height: 2),
+                        FittedBox(
+                          fit: BoxFit.scaleDown,
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 2.0),
+                            child: isDemo
+                              ? Icon(Icons.visibility_off_rounded, size: 9, color: amountColor)
+                              : Text(
+                                  amount >= 1000 ? '${(amount / 1000).toStringAsFixed(1)}k' : amount.toStringAsFixed(0),
+                                  style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: amountColor),
+                                ),
+                          ),
+                        ),
+                      ]
+                    ],
+                  ),
                 ),
               );
             },
@@ -772,6 +954,8 @@ class _DynamicPieChartSection extends StatelessWidget {
   final List<Map<String, dynamic>> data;
   final ValueChanged<PieChartGrouping> onGroupingChanged;
   final ValueChanged<int?> onCategoryChanged;
+  final void Function(int id)? onSliceTap;
+  final bool isDemo;
 
   const _DynamicPieChartSection({
     required this.grouping,
@@ -780,6 +964,8 @@ class _DynamicPieChartSection extends StatelessWidget {
     required this.data,
     required this.onGroupingChanged,
     required this.onCategoryChanged,
+    this.onSliceTap,
+    this.isDemo = false,
   });
 
   @override
@@ -856,6 +1042,18 @@ class _DynamicPieChartSection extends StatelessWidget {
                   width: 120,
                   child: PieChart(
                     PieChartData(
+                      pieTouchData: PieTouchData(
+                        touchCallback: (FlTouchEvent event, pieTouchResponse) {
+                          if (!event.isInterestedForInteractions || pieTouchResponse == null || pieTouchResponse.touchedSection == null) return;
+                          final idx = pieTouchResponse.touchedSection!.touchedSectionIndex;
+                          if (idx >= 0 && idx < data.length) {
+                            final id = data[idx]['id'] as int?;
+                            if (id != null && onSliceTap != null) {
+                              onSliceTap!(id);
+                            }
+                          }
+                        },
+                      ),
                       sectionsSpace: 2,
                       centerSpaceRadius: 30,
                       sections: data.map((item) {
@@ -885,6 +1083,8 @@ class _DynamicPieChartSection extends StatelessWidget {
                       final value = (item['value'] as num).toDouble();
                       final colorHex = item['color'] as String? ?? '#9E9E9E';
                       final color = ColorHelper.fromHex(colorHex);
+                      final total = data.fold<double>(0, (s, e) => s + (e['value'] as num).toDouble());
+                      final pct = total > 0 ? (value / total * 100) : 0.0;
                       return Padding(
                         padding: const EdgeInsets.symmetric(vertical: 4.0),
                         child: Row(
@@ -892,7 +1092,10 @@ class _DynamicPieChartSection extends StatelessWidget {
                             Container(width: 12, height: 12, decoration: BoxDecoration(shape: BoxShape.circle, color: color)),
                             const SizedBox(width: 6),
                             Expanded(child: Text(name, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 12, color: AppColors.textPrimary))),
-                            Text('₹${value.toStringAsFixed(0)}', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: AppColors.textMuted)),
+                            Text(
+                              isDemo ? '${pct.toStringAsFixed(1)}%' : '₹${value.toStringAsFixed(0)}',
+                              style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: AppColors.textMuted),
+                            ),
                           ],
                         ),
                       );
@@ -902,6 +1105,58 @@ class _DynamicPieChartSection extends StatelessWidget {
               ],
             ),
         ],
+      ),
+    );
+  }
+}
+
+/// Small toggle button rendered inside the MonthSwiper header (right-aligned).
+class _DemoToggleButton extends StatelessWidget {
+  final bool isDemo;
+  final VoidCallback onToggle;
+  const _DemoToggleButton({required this.isDemo, required this.onToggle});
+
+  @override
+  Widget build(BuildContext context) {
+    return Tooltip(
+      message: isDemo ? 'Masking ON — tap to show details' : 'Hide sensitive details',
+      child: GestureDetector(
+        onTap: onToggle,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 200),
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+          decoration: BoxDecoration(
+            color: isDemo
+                ? AppColors.primary.withValues(alpha: 0.25)
+                : Colors.white.withValues(alpha: 0.08),
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(
+              color: isDemo
+                  ? AppColors.primary.withValues(alpha: 0.6)
+                  : Colors.white.withValues(alpha: 0.2),
+              width: 1,
+            ),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                isDemo ? Icons.visibility_off_rounded : Icons.visibility_rounded,
+                size: 14,
+                color: isDemo ? AppColors.primary : Colors.white70,
+              ),
+              const SizedBox(width: 5),
+              Text(
+                'Hide Details',
+                style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w600,
+                  color: isDemo ? AppColors.primary : Colors.white70,
+                ),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }

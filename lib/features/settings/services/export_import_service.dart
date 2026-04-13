@@ -8,6 +8,7 @@ import 'package:path/path.dart';
 import 'package:sqflite/sqflite.dart';
 
 import '../../../core/constants/app_constants.dart';
+import '../../../core/database/database_service.dart';
 
 import '../../../repositories/account_repository.dart';
 import '../../../repositories/base_repository.dart';
@@ -23,6 +24,10 @@ import '../../../repositories/transaction_repository.dart';
 import '../../../repositories/budget_total_repository.dart';
 import '../../../repositories/merchant_rule_repository.dart';
 import '../../../repositories/transaction_rule_repository.dart';
+import '../../../repositories/general_settings_repository.dart';
+import '../../../repositories/widget_filter_repository.dart';
+import '../../../repositories/investment_goal_repository.dart';
+import '../../../repositories/strategy_repository.dart';
 
 import '../../../models/account.dart';
 import '../../../models/budget.dart';
@@ -53,6 +58,10 @@ class ExportImportService {
   final _budgetTotalRepo = BudgetTotalRepository();
   final _merchantRuleRepo = MerchantRuleRepository();
   final _transactionRuleRepo = TransactionRuleRepository();
+  final _generalSettingsRepo = GeneralSettingsRepository();
+  final _widgetFilterRepo = WidgetFilterRepository();
+  final _investmentGoalRepo = InvestmentGoalRepository();
+  final _strategyRepo = StrategyRepository();
 
   /// EXPORT FUNCTIONALITY
   Future<String?> exportData({
@@ -65,7 +74,7 @@ class ExportImportService {
   }) async {
     try {
       final Map<String, dynamic> exportMap = {
-        'version': 2,
+        'version': 3,
         'timestamp': DateTime.now().toIso8601String(),
       };
 
@@ -163,7 +172,34 @@ class ExportImportService {
       'budget_totals': (await _budgetTotalRepo.getAll()).map((e) => e.toMap()).toList(),
       'merchant_rules': (await _merchantRuleRepo.getAll()).map((e) => e.toMap()).toList(),
       'transaction_rules': (await _transactionRuleRepo.getAll()).map((e) => e.toMap()).toList(),
+      'investment_goals': (await _investmentGoalRepo.getAll()).map((e) => e.toMap()).toList(),
+      'general_settings': await _generalSettingsRepo.getAllSettings(),
+      'widget_filters': await _exportWidgetFilters(),
+      'budget_frameworks': (await _strategyRepo.getAllFrameworks()).map((e) => e.toMap()).toList(),
+      'budget_buckets': await _exportAllBuckets(),
+      'category_bucket_mappings': await _exportAllCategoryMappings(),
+      'strategy_settings': await _exportAllStrategySettings(),
     };
+  }
+
+  Future<List<Map<String, dynamic>>> _exportWidgetFilters() async {
+    final db = await DatabaseService().database;
+    return await db.query('widget_filter');
+  }
+
+  Future<List<Map<String, dynamic>>> _exportAllBuckets() async {
+    final db = await DatabaseService().database;
+    return await db.query('budget_bucket');
+  }
+
+  Future<List<Map<String, dynamic>>> _exportAllCategoryMappings() async {
+    final db = await DatabaseService().database;
+    return await db.query('category_bucket_mapping');
+  }
+
+  Future<List<Map<String, dynamic>>> _exportAllStrategySettings() async {
+    final db = await DatabaseService().database;
+    return await db.query('strategy_settings');
   }
 
   Future<List<Map<String, dynamic>>> _exportTransactions({
@@ -216,7 +252,7 @@ class ExportImportService {
       final String jsonString = await file.readAsString();
       final Map<String, dynamic> importMap = jsonDecode(jsonString);
 
-      if (importMap['version'] > 2) {
+      if (importMap['version'] > 3) {
         throw Exception('Unsupported backup version.');
       }
 
@@ -231,6 +267,9 @@ class ExportImportService {
         'cards': {},
         'merchant_rules': {},
         'transaction_rules': {},
+        'investment_goals': {},
+        'budget_frameworks': {},
+        'budget_buckets': {},
       };
 
       if (importConfig && importMap.containsKey('configuration')) {
@@ -324,17 +363,23 @@ class ExportImportService {
       ]
     );
 
-    // 3. New Entities for Version 2
+    // 3. New Entities for Version 3
     
-    // Budget Totals (Independent)
-    await _mapAndInsert<f_txn.Transaction>( // I'll use a dummy type or just rely on the map behavior
-        data: config['budget_totals'] ?? [],
-        repo: _budgetTotalRepo,
-        uniqueField: null,
-        idField: 'total_id',
+    // Investment Goals (Dependent)
+    idMaps['investment_goals'] = await _mapAndInsertDependent<f_txn.Transaction>(
+      data: config['investment_goals'] ?? [],
+      repo: _investmentGoalRepo,
+      uniqueField: 'goal_name',
+      idField: 'goal_id',
+      fkMappings: [
+        MapEntry('merchant_id', idMaps['merchants']!),
+        MapEntry('category_id', idMaps['categories']!),
+        MapEntry('subcategory_id', idMaps['sub_categories']!),
+        MapEntry('purpose_id', idMaps['expense_purposes']!),
+      ]
     );
 
-    // Merchant Rules (Dependent on merchants, categories, sub_categories, purposes)
+    // Merchant Rules (Updated with goal_id)
     idMaps['merchant_rules'] = await _mapAndInsertDependent<f_txn.Transaction>(
       data: config['merchant_rules'] ?? [],
       repo: _merchantRuleRepo,
@@ -345,6 +390,7 @@ class ExportImportService {
         MapEntry('category_id', idMaps['categories']!),
         MapEntry('subcategory_id', idMaps['sub_categories']!),
         MapEntry('purpose_id', idMaps['expense_purposes']!),
+        MapEntry('goal_id', idMaps['investment_goals']!),
       ]
     );
 
@@ -352,13 +398,86 @@ class ExportImportService {
     idMaps['transaction_rules'] = await _mapAndInsertDependent<f_txn.Transaction>(
       data: config['transaction_rules'] ?? [],
       repo: _transactionRuleRepo,
-      uniqueField: null, // Multiple patterns for same type/id might exist or we use a custom check
+      uniqueField: null,
       idField: 'rule_id',
       fkMappings: [
         MapEntry('account_id', idMaps['accounts']!),
         MapEntry('card_id', idMaps['cards']!),
         MapEntry('payment_method_id', idMaps['payment_methods']!),
       ]
+    );
+
+    // 4. Strategy & Settings
+    
+    // General Settings
+    final settings = config['general_settings'] ?? {};
+    for (final entry in settings.entries) {
+      await _generalSettingsRepo.setSetting(entry.key, entry.value.toString());
+    }
+
+    // Widget Filters
+    final filters = config['widget_filters'] ?? [];
+    for (final f in filters) {
+      final map = Map<String, dynamic>.from(f);
+      map.remove('filter_id');
+      // Map target_id if it's a category/subcategory
+      if (map['target_type'] == 'CATEGORY') {
+        map['target_id'] = idMaps['categories']![map['target_id']] ?? map['target_id'];
+      } else if (map['target_type'] == 'SUBCATEGORY') {
+        map['target_id'] = idMaps['sub_categories']![map['target_id']] ?? map['target_id'];
+      }
+      final db = await DatabaseService().database;
+      await db.insert('widget_filter', map, conflictAlgorithm: ConflictAlgorithm.replace);
+    }
+
+    // Strategy Frameworks
+    idMaps['budget_frameworks'] = await _mapAndInsertDependent<f_txn.Transaction>(
+      data: config['budget_frameworks'] ?? [],
+      repo: _strategyRepo as dynamic, // Generic helper works fine with raw map
+      uniqueField: 'name',
+      idField: 'framework_id',
+      fkMappings: [],
+      customTableName: 'budget_framework'
+    );
+
+    // Strategy Buckets
+    idMaps['budget_buckets'] = await _mapAndInsertDependent<f_txn.Transaction>(
+      data: config['budget_buckets'] ?? [],
+      repo: _strategyRepo as dynamic,
+      uniqueField: null, // Buckets are tied to framework, name alone doesn't guarantee uniqueness
+      idField: 'bucket_id',
+      fkMappings: [
+        MapEntry('framework_id', idMaps['budget_frameworks']!),
+      ],
+      customTableName: 'budget_bucket'
+    );
+
+    // Category Bucket Mappings
+    final mappings = config['category_bucket_mappings'] ?? [];
+    for (final m in mappings) {
+      final map = Map<String, dynamic>.from(m);
+      map['category_id'] = idMaps['categories']![map['category_id']] ?? map['category_id'];
+      map['framework_id'] = idMaps['budget_frameworks']![map['framework_id']] ?? map['framework_id'];
+      map['bucket_id'] = idMaps['budget_buckets']![map['bucket_id']] ?? map['bucket_id'];
+      
+      final db = await DatabaseService().database;
+      await db.insert('category_bucket_mapping', map, conflictAlgorithm: ConflictAlgorithm.replace);
+    }
+
+    // Strategy Settings
+    final strategySettings = config['strategy_settings'] ?? [];
+    for (final s in strategySettings) {
+      final map = Map<String, dynamic>.from(s);
+      final db = await DatabaseService().database;
+      await db.insert('strategy_settings', map, conflictAlgorithm: ConflictAlgorithm.replace);
+    }
+
+    // 5. Shared Entities (Budget Totals)
+    await _mapAndInsert<f_txn.Transaction>( 
+        data: config['budget_totals'] ?? [],
+        repo: _budgetTotalRepo,
+        uniqueField: null,
+        idField: 'total_id',
     );
   }
 
@@ -447,13 +566,15 @@ class ExportImportService {
     required String? uniqueField,
     required String idField,
     required List<MapEntry<String, Map<int,int>>> fkMappings,
+    String? customTableName,
   }) async {
      Map<int, int> idMap = {};
+     final effectiveTableName = customTableName ?? repo.tableName;
     for (var item in data) {
       final mapItem = Map<String, dynamic>.from(item);
       int oldId = mapItem[idField];
       int newId;
-
+ 
       // Swap Foreign Keys
       for(var fk in fkMappings) {
         String fkCol = fk.key;
@@ -462,20 +583,25 @@ class ExportImportService {
            mapItem[fkCol] = mapDict[mapItem[fkCol]];
         }
       }
-
+ 
        if (uniqueField != null) {
         // Check if item exists
-        final existing = await repo.rawQuery('SELECT * FROM ${repo.tableName} WHERE $uniqueField = ? LIMIT 1', [mapItem[uniqueField]]);
+        final existing = await repo.rawQuery('SELECT * FROM $effectiveTableName WHERE $uniqueField = ? LIMIT 1', [mapItem[uniqueField]]);
         if(existing.isNotEmpty) {
             newId = existing.first[idField] as int;
             idMap[oldId] = newId;
             continue; // Skip insertion
         }
       }
-
+ 
       // Prepare for insertion
       mapItem.remove(idField);
-      newId = await repo.insert(mapItem);
+      if (customTableName != null) {
+        final db = await DatabaseService().database;
+        newId = await db.insert(customTableName, mapItem);
+      } else {
+        newId = await repo.insert(mapItem);
+      }
       idMap[oldId] = newId;
     }
     return idMap;

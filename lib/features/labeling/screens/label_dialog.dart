@@ -289,6 +289,7 @@ class _LabelDialogState extends ConsumerState<LabelDialog> {
           'category_id': _categoryId,
           'subcategory_id': _subcategoryId,
           'purpose_id': _purposeId,
+          'goal_id': _goalId,
           'updated_time': nowStr,
         }, conflictAlgorithm: ConflictAlgorithm.replace);
       }
@@ -589,51 +590,6 @@ class _LabelDialogState extends ConsumerState<LabelDialog> {
                                 ),
                               ),
                               const SizedBox(height: 12),
-
-                              if (_nature == 'INVESTMENTS') ...[
-                                // Goal Selection
-                                const Padding(
-                                  padding: EdgeInsets.symmetric(horizontal: 4, vertical: 8),
-                                  child: Row(
-                                    children: [
-                                      Icon(Icons.star_rounded, color: Colors.amberAccent),
-                                      SizedBox(width: 12),
-                                      Text(
-                                        'Investment Goal',
-                                        style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                                AutocompleteField<InvestmentGoal>(
-                                  label: 'Select Goal',
-                                  initialItem: _goalId == null
-                                      ? null
-                                      : _goals.where((g) => g.id == _goalId).firstOrNull,
-                                  items: _goals,
-                                  displayStringForOption: (g) => g.goalName,
-                                  onChanged: (g) {
-                                    setState(() {
-                                      _goalId = g?.id;
-                                      if (g != null) {
-                                        _categoryId = g.categoryId;
-                                        _subcategoryId = g.subcategoryId;
-                                        _purposeId = g.purposeId;
-                                      }
-                                    });
-                                    if (g?.categoryId != null) {
-                                      _loadSubs(g!.categoryId, g.subcategoryId);
-                                    }
-                                  },
-                                  onAddNew: (text) {
-                                    // Optional: navigate to settings to add goals
-                                    ScaffoldMessenger.of(context).showSnackBar(
-                                      const SnackBar(content: Text('Add new goals in Settings > Planner'))
-                                    );
-                                  },
-                                ),
-                                const SizedBox(height: 16),
-                              ],
 
                               // 3. Amount Section
                               ExpansionTile(
@@ -1005,9 +961,9 @@ class _LabelDialogState extends ConsumerState<LabelDialog> {
                                     Icons.store,
                                     color: AppColors.primary,
                                   ),
-                                  title: const Text(
-                                    'Merchant Rule',
-                                    style: TextStyle(
+                                  title: Text(
+                                    _nature == 'INVESTMENTS' ? 'Investment Platform Rule' : 'Merchant Rule',
+                                    style: const TextStyle(
                                       fontWeight: FontWeight.bold,
                                       fontSize: 15,
                                     ),
@@ -1062,9 +1018,10 @@ class _LabelDialogState extends ConsumerState<LabelDialog> {
                                                 _merchantKeywordLastSelectedText =
                                                     null;
                                               },
-                                              decoration: const InputDecoration(
-                                                labelText:
-                                                    'Merchant Keyword (Auto-suggests)',
+                                              decoration: InputDecoration(
+                                                labelText: _nature == 'INVESTMENTS'
+                                                    ? 'Platform Keyword (Auto-suggests)'
+                                                    : 'Merchant Keyword (Auto-suggests)',
                                                 hintText:
                                                     'e.g. q321SDf54sf64sdv6@ybl',
                                               ),
@@ -1119,7 +1076,7 @@ class _LabelDialogState extends ConsumerState<LabelDialog> {
                                     ),
                                     const SizedBox(height: 12),
                                     AutocompleteField<Merchant>(
-                                      label: 'Merchant Name',
+                                      label: _nature == 'INVESTMENTS' ? 'Platform Name' : 'Merchant Name',
                                       initialItem: _merchantId == null
                                           ? null
                                           : _merchants
@@ -1149,6 +1106,8 @@ class _LabelDialogState extends ConsumerState<LabelDialog> {
                                                           rule.subcategoryId;
                                                     if (rule.purposeId != null)
                                                       _purposeId = rule.purposeId;
+                                                    if (rule.goalId != null)
+                                                      _goalId = rule.goalId;
                                                   });
                                                   if (rule.categoryId != null) {
                                                     _loadSubs(
@@ -1170,7 +1129,7 @@ class _LabelDialogState extends ConsumerState<LabelDialog> {
                                               existingColors,
                                             );
                                         _addNew<Merchant>(
-                                          'Merchant',
+                                          _nature == 'INVESTMENTS' ? 'Investment Platform' : 'Merchant',
                                           text,
                                           (name) => ref
                                               .read(merchantRepositoryProvider)
@@ -1197,6 +1156,44 @@ class _LabelDialogState extends ConsumerState<LabelDialog> {
                                       },
                                     ),
                                     const SizedBox(height: 12),
+
+                                    // Goal selection inside Merchant Rule
+                                    if (_nature == 'INVESTMENTS') ...[
+                                      AutocompleteField<InvestmentGoal>(
+                                        label: 'Investment Goal',
+                                        initialItem: _goalId == null
+                                            ? null
+                                            : _goals
+                                                .where((g) => g.id == _goalId)
+                                                .firstOrNull,
+                                        items: _goals,
+                                        displayStringForOption: (g) => g.goalName,
+                                        onChanged: (g) {
+                                          setState(() {
+                                            _goalId = g?.id;
+                                            if (g != null) {
+                                              _categoryId = g.categoryId;
+                                              _subcategoryId = g.subcategoryId;
+                                              _purposeId = g.purposeId;
+                                            }
+                                          });
+                                          if (g?.categoryId != null) {
+                                            _loadSubs(g!.categoryId, g.subcategoryId);
+                                          }
+                                        },
+                                        onAddNew: (text) {
+                                          ScaffoldMessenger.of(context).showSnackBar(
+                                            const SnackBar(
+                                              content: Text(
+                                                'Add new goals in Settings > Planner',
+                                              ),
+                                            ),
+                                          );
+                                        },
+                                      ),
+                                      const SizedBox(height: 12),
+                                    ],
+
                                     AutocompleteField<Category>(
                                       label: 'Category',
                                       initialItem: _categoryId == null

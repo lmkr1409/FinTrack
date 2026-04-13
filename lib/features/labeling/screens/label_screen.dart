@@ -26,7 +26,38 @@ import '../../transactions/screens/upload_statement_screen.dart';
 
 /// Screen with Unlabeled / Labeled tabs for reviewing and labeling transactions.
 class LabelScreen extends ConsumerStatefulWidget {
-  const LabelScreen({super.key});
+  final int? initialMonth;
+  final int? initialYear;
+  final String? initialStartDate;
+  final String? initialEndDate;
+  final int? initialCategoryId;
+  final int? initialMerchantId;
+  final int? initialAccountId;
+  final int? initialCardId;
+  final String? initialNature;
+  final String? initialType;
+  final String? initialSort;
+  final String? initialWidgetKey;
+  final int? initialLimit;
+  final bool showBackButton;
+
+  const LabelScreen({
+    super.key,
+    this.initialMonth,
+    this.initialYear,
+    this.initialStartDate,
+    this.initialEndDate,
+    this.initialCategoryId,
+    this.initialMerchantId,
+    this.initialAccountId,
+    this.initialCardId,
+    this.initialNature,
+    this.initialType,
+    this.initialSort,
+    this.initialWidgetKey,
+    this.initialLimit,
+    this.showBackButton = false,
+  });
 
   @override
   ConsumerState<LabelScreen> createState() => _LabelScreenState();
@@ -44,6 +75,8 @@ class _LabelScreenState extends ConsumerState<LabelScreen>
   // Filters
   int? _filterMonth;
   int? _filterYear;
+  String? _filterStartDate;
+  String? _filterEndDate;
   int? _filterAccountId;
   int? _filterCardId;
   int? _filterCategoryId;
@@ -51,6 +84,7 @@ class _LabelScreenState extends ConsumerState<LabelScreen>
   String? _filterType;
   String? _filterNature;
   String? _filterSort;
+  int? _filterLimit;
 
   // Lookup maps for displaying labels
   Map<int, Category> _categoryMap = {};
@@ -70,6 +104,19 @@ class _LabelScreenState extends ConsumerState<LabelScreen>
   @override
   void initState() {
     super.initState();
+    _filterMonth = widget.initialMonth;
+    _filterYear = widget.initialYear;
+    _filterStartDate = widget.initialStartDate;
+    _filterEndDate = widget.initialEndDate;
+    _filterCategoryId = widget.initialCategoryId;
+    _filterMerchantId = widget.initialMerchantId;
+    _filterAccountId = widget.initialAccountId;
+    _filterCardId = widget.initialCardId;
+    _filterNature = widget.initialNature;
+    _filterType = widget.initialType;
+    _filterSort = widget.initialSort;
+    _filterLimit = widget.initialLimit;
+
     _tabController = TabController(length: 4, vsync: this, initialIndex: 0);
     _tabController.addListener(() {
       if (mounted) setState(() {});
@@ -97,6 +144,8 @@ class _LabelScreenState extends ConsumerState<LabelScreen>
     final all = await repo.getFiltered(
       month: _filterMonth,
       year: _filterYear,
+      startDate: _filterStartDate,
+      endDate: _filterEndDate,
       accountId: _filterAccountId,
       cardId: _filterCardId,
       categoryId: _filterCategoryId,
@@ -104,12 +153,16 @@ class _LabelScreenState extends ConsumerState<LabelScreen>
       transactionType: _filterType,
       nature: _filterNature,
       orderBy: _filterSort,
+      limit: _filterLimit,
+      widgetKey: widget.initialWidgetKey,
     );
     final unlabeled = await repo.getFiltered(
       labeled: false,
       isAutoLabeled: false,
       month: _filterMonth,
       year: _filterYear,
+      startDate: _filterStartDate,
+      endDate: _filterEndDate,
       accountId: _filterAccountId,
       cardId: _filterCardId,
       categoryId: _filterCategoryId,
@@ -117,12 +170,16 @@ class _LabelScreenState extends ConsumerState<LabelScreen>
       transactionType: _filterType,
       nature: _filterNature,
       orderBy: _filterSort,
+      limit: _filterLimit,
+      widgetKey: widget.initialWidgetKey,
     );
     final autoLabeled = await repo.getFiltered(
       labeled: false,
       isAutoLabeled: true,
       month: _filterMonth,
       year: _filterYear,
+      startDate: _filterStartDate,
+      endDate: _filterEndDate,
       accountId: _filterAccountId,
       cardId: _filterCardId,
       categoryId: _filterCategoryId,
@@ -130,11 +187,15 @@ class _LabelScreenState extends ConsumerState<LabelScreen>
       transactionType: _filterType,
       nature: _filterNature,
       orderBy: _filterSort,
+      limit: _filterLimit,
+      widgetKey: widget.initialWidgetKey,
     );
     final labeled = await repo.getFiltered(
       labeled: true,
       month: _filterMonth,
       year: _filterYear,
+      startDate: _filterStartDate,
+      endDate: _filterEndDate,
       accountId: _filterAccountId,
       cardId: _filterCardId,
       categoryId: _filterCategoryId,
@@ -142,6 +203,8 @@ class _LabelScreenState extends ConsumerState<LabelScreen>
       transactionType: _filterType,
       nature: _filterNature,
       orderBy: _filterSort,
+      limit: _filterLimit,
+      widgetKey: widget.initialWidgetKey,
     );
 
     final categories = await ref
@@ -323,6 +386,8 @@ class _LabelScreenState extends ConsumerState<LabelScreen>
   Widget _buildActionBar() {
     final hasFilters = _filterMonth != null ||
         _filterYear != null ||
+        _filterStartDate != null ||
+        _filterEndDate != null ||
         _filterAccountId != null ||
         _filterCardId != null ||
         _filterCategoryId != null ||
@@ -335,12 +400,35 @@ class _LabelScreenState extends ConsumerState<LabelScreen>
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
       child: Row(
         children: [
+          if (widget.showBackButton)
+            IconButton(
+              icon: const Icon(Icons.arrow_back_rounded),
+              padding: EdgeInsets.zero,
+              constraints: const BoxConstraints(),
+              onPressed: () => Navigator.pop(context),
+            ),
+          if (widget.showBackButton) const SizedBox(width: 8),
           Expanded(
             child: hasFilters
                 ? Wrap(
                     spacing: 6,
                     runSpacing: 4,
                     children: [
+                      if (_filterStartDate != null || _filterEndDate != null)
+                        _chip(
+                          (_filterStartDate != null && _filterStartDate == _filterEndDate)
+                              ? DateFormat('dd MMM').format(DateTime.parse(_filterStartDate!))
+                              : '${_filterStartDate != null ? DateFormat('dd MMM').format(DateTime.parse(_filterStartDate!)) : '...'}'
+                                ' to '
+                                '${_filterEndDate != null ? DateFormat('dd MMM').format(DateTime.parse(_filterEndDate!)) : '...'}',
+                          () {
+                            setState(() {
+                              _filterStartDate = null;
+                              _filterEndDate = null;
+                            });
+                            _loadData();
+                          },
+                        ),
                       if (_filterYear != null)
                         _chip('$_filterYear', () {
                           setState(() => _filterYear = null);
@@ -709,6 +797,8 @@ class _LabelScreenState extends ConsumerState<LabelScreen>
                           setState(() {
                             _filterMonth = null;
                             _filterYear = null;
+                            _filterStartDate = null;
+                            _filterEndDate = null;
                             _filterAccountId = null;
                             _filterCardId = null;
                             _filterCategoryId = null;

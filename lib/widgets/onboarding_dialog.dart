@@ -38,7 +38,7 @@ class OnboardingDialog extends StatelessWidget {
             _buildStep(
               Icons.label_rounded,
               'Manual Labeling',
-              'Initially, some transactions may be unlabeled. Tap them to set a category and merchant.',
+              'Initially, some transactions may be unlabeled. Tap them to set a category and merchant/platform.',
             ),
             _buildStep(
               Icons.psychology_rounded,

@@ -12,12 +12,14 @@ import '../repositories/sub_category_repository.dart';
 import '../repositories/transaction_repository.dart';
 import '../repositories/merchant_rule_repository.dart';
 import '../repositories/transaction_rule_repository.dart';
+import '../repositories/labeling_rule_repository.dart';
 import '../repositories/budget_total_repository.dart';
 import '../repositories/investment_goal_repository.dart';
 import '../repositories/strategy_repository.dart';
 import '../repositories/widget_filter_repository.dart';
 import '../repositories/general_settings_repository.dart';
 import 'analytics_service.dart';
+import 'security_service.dart';
 
 // ─── Repository Providers ────────────────────────────────────────────
 
@@ -69,6 +71,10 @@ final transactionRuleRepositoryProvider = Provider<TransactionRuleRepository>((r
   return TransactionRuleRepository();
 });
 
+final labelingRuleRepositoryProvider = Provider<LabelingRuleRepository>((ref) {
+  return LabelingRuleRepository();
+});
+
 final budgetTotalRepositoryProvider = Provider<BudgetTotalRepository>((ref) {
   return BudgetTotalRepository();
 });
@@ -92,3 +98,39 @@ final generalSettingsRepositoryProvider = Provider<GeneralSettingsRepository>((r
 final analyticsServiceProvider = Provider<AnalyticsService>((ref) {
   return AnalyticsService();
 });
+
+final securityServiceProvider = Provider<SecurityService>((ref) {
+  return SecurityService(ref.read(generalSettingsRepositoryProvider));
+});
+
+// ─── Demo Mode Provider ───────────────────────────────────────────────────────
+
+class DemoModeNotifier extends AsyncNotifier<bool> {
+  static const _key = 'demo_mode_enabled';
+
+  @override
+  Future<bool> build() async {
+    final repo = ref.read(generalSettingsRepositoryProvider);
+    final val = await repo.getSetting(_key);
+    return val == 'true';
+  }
+
+  Future<void> toggle() async {
+    final current = await future;
+    final next = !current;
+    final repo = ref.read(generalSettingsRepositoryProvider);
+    await repo.setSetting(_key, next.toString());
+    state = AsyncData(next);
+  }
+
+  Future<void> set(bool value) async {
+    final repo = ref.read(generalSettingsRepositoryProvider);
+    await repo.setSetting(_key, value.toString());
+    state = AsyncData(value);
+  }
+}
+
+/// Reactive demo-mode flag. Watch this to conditionally mask financial values.
+final demoModeProvider = AsyncNotifierProvider<DemoModeNotifier, bool>(
+  DemoModeNotifier.new,
+);

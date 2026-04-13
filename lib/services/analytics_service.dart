@@ -62,7 +62,7 @@ class AnalyticsService {
     final db = await _db.database;
     String filter = '';
     if (widgetKey != null) {
-      filter = await _getFilterSnippet(widgetKey);
+      filter = await _getFilterSnippet(widgetKey, tableAlias: 't.');
     }
     return db.rawQuery(
       'SELECT c.category_id, c.category_name, c.icon, c.icon_color, '
@@ -404,7 +404,7 @@ class AnalyticsService {
       FROM "transaction" t
       LEFT JOIN category c ON t.category_id = c.category_id
       WHERE t.nature='TRANSACTIONS' AND t.transaction_type='DEBIT' AND t.transaction_date >= ? AND t.transaction_date <= ?
-      ${widgetKey != null ? await _getFilterSnippet(widgetKey) : ''}
+      ${widgetKey != null ? await _getFilterSnippet(widgetKey, tableAlias: 't.') : ''}
       GROUP BY c.category_id
       HAVING value > 0
       ORDER BY value DESC
@@ -469,7 +469,7 @@ class AnalyticsService {
       FROM "transaction" t
       LEFT JOIN sub_category s ON t.subcategory_id = s.subcategory_id
       WHERE t.nature='TRANSACTIONS' AND t.transaction_type='DEBIT' AND t.transaction_date >= ? AND t.transaction_date <= ? AND t.category_id = ?
-      ${widgetKey != null ? await _getFilterSnippet(widgetKey) : ''}
+      ${widgetKey != null ? await _getFilterSnippet(widgetKey, tableAlias: 't.') : ''}
       GROUP BY s.subcategory_id
       HAVING value > 0
       ORDER BY value DESC
@@ -496,7 +496,7 @@ class AnalyticsService {
     final db = await _db.database;
     String filter = '';
     if (widgetKey != null) {
-      filter = await _getFilterSnippet(widgetKey);
+      filter = await _getFilterSnippet(widgetKey, tableAlias: 't.');
     }
     return db.rawQuery('''
       SELECT 
@@ -561,7 +561,8 @@ class AnalyticsService {
   }) async {
     final settings = await _getGeneralSettings();
     final prefix = widgetKey == 'monthly_budget' ? 'budget_' : 
-                   widgetKey == 'strategic_planner' ? 'strategy_' : 'allocation_';
+                   widgetKey == 'strategic_planner' ? 'strategy_' : 
+                   widgetKey == 'financial_flow' ? 'flow_' : 'allocation_';
 
     final salaryMode = settings['${prefix}salary_mode'] ?? 'CURRENT';
     final otherMode = settings['${prefix}other_mode'] ?? 'CURRENT';
@@ -610,18 +611,21 @@ class AnalyticsService {
     );
     final expenses = (expenseQuery.first['total'] as num).toDouble();
 
-    // Net investments — DEBIT minus CREDIT
-    String invFilter = widgetKey != null ? await _getFilterSnippet(widgetKey) : '';
+    // Net investments — DEBIT minus CREDIT (no category filter — always raw total)
+    // Use substr normalization to handle both space and T date separators consistently
+    final startDate = '${start.year}-${start.month.toString().padLeft(2, '0')}-${start.day.toString().padLeft(2, '0')}';
+    final endDate = '${end.year}-${end.month.toString().padLeft(2, '0')}-${end.day.toString().padLeft(2, '0')}';
     final invDebitQuery = await db.rawQuery(
-      'SELECT COALESCE(SUM(amount), 0) as total FROM "transaction" WHERE nature=\'INVESTMENTS\' AND transaction_type=\'DEBIT\' AND transaction_date >= ? AND transaction_date <= ? $invFilter',
-      [start.toIso8601String(), end.toIso8601String()],
+      'SELECT COALESCE(SUM(amount), 0) as total FROM "transaction" WHERE nature=\'INVESTMENTS\' AND transaction_type=\'DEBIT\' AND substr(transaction_date,1,10) >= ? AND substr(transaction_date,1,10) <= ?',
+      [startDate, endDate],
     );
     final invCreditQuery = await db.rawQuery(
-      'SELECT COALESCE(SUM(amount), 0) as total FROM "transaction" WHERE nature=\'INVESTMENTS\' AND transaction_type=\'CREDIT\' AND transaction_date >= ? AND transaction_date <= ? $invFilter',
-      [start.toIso8601String(), end.toIso8601String()],
+      'SELECT COALESCE(SUM(amount), 0) as total FROM "transaction" WHERE nature=\'INVESTMENTS\' AND transaction_type=\'CREDIT\' AND substr(transaction_date,1,10) >= ? AND substr(transaction_date,1,10) <= ?',
+      [startDate, endDate],
     );
-    final investments = ((invDebitQuery.first['total'] as num).toDouble() -
-        (invCreditQuery.first['total'] as num).toDouble()).clamp(0.0, double.infinity);
+    final invDebit = (invDebitQuery.first['total'] as num?)?.toDouble() ?? 0.0;
+    final invCredit = (invCreditQuery.first['total'] as num?)?.toDouble() ?? 0.0;
+    final investments = (invDebit - invCredit).clamp(0.0, double.infinity);
 
     return {
       'income': income,
@@ -632,7 +636,7 @@ class AnalyticsService {
 
   Future<double> _getIncomeForCategory(DateTime start, DateTime end, {required bool isSalary, String? widgetKey}) async {
     final db = await _db.database;
-    String filter = widgetKey != null ? await _getFilterSnippet(widgetKey) : '';
+    String filter = widgetKey != null ? await _getFilterSnippet(widgetKey, tableAlias: 't.') : '';
     
     String query = '''
       SELECT SUM(t.amount) as total 
@@ -726,7 +730,8 @@ class AnalyticsService {
 
     final settings = await _getGeneralSettings();
     final prefix = widgetKey == 'monthly_budget' ? 'budget_' : 
-                   widgetKey == 'income_allocation' ? 'allocation_' : 'strategy_';
+                   widgetKey == 'income_allocation' ? 'allocation_' : 
+                   widgetKey == 'financial_flow' ? 'flow_' : 'strategy_';
 
     final salaryMode = settings['${prefix}salary_mode'] ?? 'CURRENT';
     final otherMode = settings['${prefix}other_mode'] ?? 'CURRENT';
@@ -745,7 +750,7 @@ class AnalyticsService {
 
   // ─── Filter Helpers ─────────────────────────────────────
 
-  Future<String> _getFilterSnippet(String widgetKey) async {
+  Future<String> _getFilterSnippet(String widgetKey, {String tableAlias = ''}) async {
     final db = await _db.database;
     final filters = await db.query('widget_filter', where: 'widget_key = ?', whereArgs: [widgetKey]);
     if (filters.isEmpty) return '';
@@ -762,21 +767,19 @@ class AnalyticsService {
 
     String snippet = '';
     if (excludedCategories.isNotEmpty) {
-      snippet += ' AND category_id NOT IN (${excludedCategories.join(",")})';
+      snippet += ' AND ${tableAlias}category_id NOT IN (${excludedCategories.join(",")})';
     }
     if (excludedSubcats.isNotEmpty) {
-      snippet += ' AND subcategory_id NOT IN (${excludedSubcats.join(",")})';
+      snippet += ' AND ${tableAlias}subcategory_id NOT IN (${excludedSubcats.join(",")})';
     }
     
-    // For INCLUDE filters, it's a bit more complex. 
-    // If any INCLUDE filters exist for a type, then ONLY those must be included.
     final includedCategories = filters
         .where((f) => f['filter_type'] == 'INCLUDE' && f['target_type'] == 'CATEGORY')
         .map((f) => f['target_id'])
         .toList();
     
     if (includedCategories.isNotEmpty) {
-       snippet += ' AND category_id IN (${includedCategories.join(",")})';
+       snippet += ' AND ${tableAlias}category_id IN (${includedCategories.join(",")})';
     }
     
     final includedSubcats = filters
@@ -785,7 +788,7 @@ class AnalyticsService {
         .toList();
     
     if (includedSubcats.isNotEmpty) {
-       snippet += ' AND subcategory_id IN (${includedSubcats.join(",")})';
+       snippet += ' AND ${tableAlias}subcategory_id IN (${includedSubcats.join(",")})';
     }
 
     return snippet;

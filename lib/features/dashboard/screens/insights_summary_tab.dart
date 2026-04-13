@@ -1,20 +1,22 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 
 import '../../../core/theme/app_colors.dart';
 import '../../../services/analytics_service.dart';
+import '../../../services/providers.dart';
 import '../../../widgets/glass_card.dart';
 import '../../../widgets/month_swiper.dart';
 
 /// Insights tab — smart spending suggestions in glassmorphic cards.
-class InsightsSummaryTab extends StatefulWidget {
+class InsightsSummaryTab extends ConsumerStatefulWidget {
   const InsightsSummaryTab({super.key});
 
   @override
-  State<InsightsSummaryTab> createState() => _InsightsSummaryTabState();
+  ConsumerState<InsightsSummaryTab> createState() => _InsightsSummaryTabState();
 }
 
-class _InsightsSummaryTabState extends State<InsightsSummaryTab> {
+class _InsightsSummaryTabState extends ConsumerState<InsightsSummaryTab> {
   final _analytics = AnalyticsService();
   bool _loading = true;
   final List<_Insight> _insights = [];
@@ -51,13 +53,15 @@ class _InsightsSummaryTabState extends State<InsightsSummaryTab> {
             icon: Icons.warning_amber_rounded,
             color: AppColors.warning,
             title: 'High Spending Alert',
-            body: 'You\'ve spent ${(ratio * 100).toStringAsFixed(0)}% of your income. Consider cutting discretionary expenses.'));
+            body: 'You\'ve spent ${(ratio * 100).toStringAsFixed(0)}% of your income. Consider cutting discretionary expenses.',
+            demoBody: 'You\'ve spent ${(ratio * 100).toStringAsFixed(0)}% of your income. Consider cutting discretionary expenses.'));
       } else if (ratio < 0.5) {
         _insights.add(_Insight(
             icon: Icons.thumb_up_rounded,
             color: AppColors.income,
             title: 'Great Savings!',
-            body: 'You\'re saving ${((1 - ratio) * 100).toStringAsFixed(0)}% of your income. Keep it up!'));
+            body: 'You\'re saving ${((1 - ratio) * 100).toStringAsFixed(0)}% of your income. Keep it up!',
+            demoBody: 'You\'re saving ${((1 - ratio) * 100).toStringAsFixed(0)}% of your income. Keep it up!'));
       }
     }
 
@@ -69,7 +73,8 @@ class _InsightsSummaryTabState extends State<InsightsSummaryTab> {
             icon: Icons.pie_chart_rounded,
             color: AppColors.secondary,
             title: '${topCat['category_name']} Dominates Spending',
-            body: '${pct.toStringAsFixed(0)}% of expenses go to ${topCat['category_name']}. Look for ways to optimize.'));
+            body: '${pct.toStringAsFixed(0)}% of expenses go to ${topCat['category_name']}. Look for ways to optimize.',
+            demoBody: '${pct.toStringAsFixed(0)}% of expenses go to ${topCat['category_name']}. Look for ways to optimize.'));
       }
     }
 
@@ -80,7 +85,8 @@ class _InsightsSummaryTabState extends State<InsightsSummaryTab> {
           icon: Icons.money_off_rounded,
           color: AppColors.expense,
           title: "${overBudgets.length} Budget${overBudgets.length > 1 ? 's' : ''} Exceeded",
-          body: 'Over budget in: $names. Review spending in these areas.'));
+          body: 'Over budget in: $names. Review spending in these areas.',
+          demoBody: 'Over budget in: $names. Review spending in these areas.'));
     }
 
     if (totalExpense == 0) {
@@ -94,11 +100,13 @@ class _InsightsSummaryTabState extends State<InsightsSummaryTab> {
     if (totalExpense > 0 && _selectedMonth.year == now.year && _selectedMonth.month == now.month) {
       final dailyAvg = totalExpense / now.day;
       final projected = dailyAvg * DateTime(now.year, now.month + 1, 0).day;
+      final projectedPct = totalIncome > 0 ? (projected / totalIncome * 100).toStringAsFixed(0) : '?';
       _insights.add(_Insight(
           icon: Icons.trending_up_rounded,
           color: AppColors.info,
           title: 'Projected Monthly Spend',
-          body: 'At ₹${dailyAvg.toStringAsFixed(0)}/day, your projected total is ₹${projected.toStringAsFixed(0)} this month.'));
+          body: 'At ₹${dailyAvg.toStringAsFixed(0)}/day, your projected total is ₹${projected.toStringAsFixed(0)} this month.',
+          demoBody: 'Projected to spend $projectedPct% of income this month at current pace.'));
     }
 
     if (mounted) {
@@ -110,6 +118,7 @@ class _InsightsSummaryTabState extends State<InsightsSummaryTab> {
 
   @override
   Widget build(BuildContext context) {
+    final isDemo = ref.watch(demoModeProvider).valueOrNull ?? false;
     return Scaffold(
       body: MonthSwiper(
         currentMonth: _selectedMonth,
@@ -117,12 +126,12 @@ class _InsightsSummaryTabState extends State<InsightsSummaryTab> {
           setState(() => _selectedMonth = newMonth);
           _generateInsights();
         },
-        child: _buildContent(),
+        child: _buildContent(isDemo),
       ),
     );
   }
 
-  Widget _buildContent() {
+  Widget _buildContent(bool isDemo) {
     if (_loading) return const Center(child: CircularProgressIndicator());
     
     return RefreshIndicator(
@@ -173,7 +182,7 @@ class _InsightsSummaryTabState extends State<InsightsSummaryTab> {
                                 Text(ins.title,
                                     style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14, color: AppColors.textPrimary)),
                                 const SizedBox(height: 4),
-                                Text(ins.body,
+                                Text(isDemo ? (ins.demoBody ?? ins.body) : ins.body,
                                     style: const TextStyle(fontSize: 13, color: AppColors.textSecondary, height: 1.4)),
                               ],
                             ),
@@ -197,5 +206,6 @@ class _Insight {
   final Color color;
   final String title;
   final String body;
-  const _Insight({required this.icon, required this.color, required this.title, required this.body});
+  final String? demoBody; // ₹-free version for demo mode
+  const _Insight({required this.icon, required this.color, required this.title, required this.body, this.demoBody});
 }

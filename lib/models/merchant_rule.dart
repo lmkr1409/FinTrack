@@ -7,6 +7,7 @@ class MerchantRule {
   final int? subcategoryId;
   final int? purposeId;
   final int? merchantId;
+  final int? goalId;
 
   MerchantRule({
     this.id,
@@ -15,6 +16,7 @@ class MerchantRule {
     this.subcategoryId,
     this.purposeId,
     this.merchantId,
+    this.goalId,
   });
 
   Map<String, dynamic> toMap() {
@@ -25,6 +27,7 @@ class MerchantRule {
       if (subcategoryId != null) 'subcategory_id': subcategoryId,
       if (purposeId != null) 'purpose_id': purposeId,
       if (merchantId != null) 'merchant_id': merchantId,
+      if (goalId != null) 'goal_id': goalId,
     };
   }
 
@@ -36,6 +39,7 @@ class MerchantRule {
       subcategoryId: map['subcategory_id']?.toInt(),
       purposeId: map['purpose_id']?.toInt(),
       merchantId: map['merchant_id']?.toInt(),
+      goalId: map['goal_id']?.toInt(),
     );
   }
 

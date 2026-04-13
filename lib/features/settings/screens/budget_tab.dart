@@ -78,9 +78,18 @@ class _BudgetTabState extends ConsumerState<BudgetTab> {
       _budgets = budgets;
       _categories = categories;
       _incomeData = income;
+      
+      final incomeVal = income['income'] ?? 0.0;
       _totalBudgetAmount = activePeriodTotal?.budgetAmount ?? 0;
       _totalBudgetId = activePeriodTotal?.id;
-      _globalBudgetInput = _totalBudgetAmount > 0 ? _totalBudgetAmount.toStringAsFixed(0) : '';
+
+      // If budget is not explicitly set, fall back to calculated income (from settings)
+      if (_totalBudgetAmount <= 0) {
+        _globalBudgetInput = incomeVal > 0 ? incomeVal.toStringAsFixed(0) : '';
+      } else {
+        _globalBudgetInput = _totalBudgetAmount.toStringAsFixed(0);
+      }
+      
       _loading = false;
     });
   }
@@ -266,8 +275,10 @@ class _BudgetTabState extends ConsumerState<BudgetTab> {
     final cs = Theme.of(context).colorScheme;
 
     final planned = _currentPlannedSum;
+    final income = _incomeData?['income'] ?? 0.0;
     final total = double.tryParse(_globalBudgetInput) ?? 0.0;
-    final isExceeded = total > 0 && planned > total;
+    final effectiveTotal = total > 0 ? total : income;
+    final isExceeded = effectiveTotal > 0 && planned > effectiveTotal;
 
     if (_loading && _categories.isEmpty) {
       return const Center(child: CircularProgressIndicator());
@@ -277,7 +288,7 @@ class _BudgetTabState extends ConsumerState<BudgetTab> {
       body: Column(
         children: [
           Padding(
-            padding: const EdgeInsets.fromLTRB(12, 12, 12, 4),
+            padding: const EdgeInsets.fromLTRB(12, 0, 12, 0),
             child: SegmentedButton<_BudgetPeriod>(
               segments: const [
                 ButtonSegment(value: _BudgetPeriod.monthly, label: Text('Monthly'), icon: Icon(Icons.calendar_month_rounded, size: 18)),
@@ -432,11 +443,12 @@ class _BudgetTabState extends ConsumerState<BudgetTab> {
     final planned = _currentPlannedSum;
     final total = double.tryParse(_globalBudgetInput) ?? 0.0;
     final income = _incomeData?['income'] ?? 0.0;
-    final isExceeded = total > 0 && planned > total;
+    final effectiveTotal = total > 0 ? total : income;
+    final isExceeded = effectiveTotal > 0 && planned > effectiveTotal;
     final isMonthly = _period == _BudgetPeriod.monthly;
 
     return GlassCard(
-      margin: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+      margin: const EdgeInsets.fromLTRB(16, 4, 16, 2),
       backgroundColor: Colors.white.withValues(alpha: 0.1),
       child: Padding(
         padding: const EdgeInsets.symmetric(vertical: 8.0, horizontal: 16.0),
@@ -459,7 +471,7 @@ class _BudgetTabState extends ConsumerState<BudgetTab> {
                   ),
                   if (isMonthly && (total > 0 || income > 0))
                     Text(
-                      'Income: ₹${income.toStringAsFixed(0)} | Allocated: ₹${planned.toStringAsFixed(0)} | ${isExceeded ? 'Exceeded' : '₹${(total - planned).toStringAsFixed(0)} left'}',
+                      'Income: ₹${income.toStringAsFixed(0)} | Allocated: ₹${planned.toStringAsFixed(0)} | ${isExceeded ? 'Exceeded' : 'Left: ₹${((total > 0 ? total : income) - planned).toStringAsFixed(0)}'}',
                       style: TextStyle(color: isExceeded ? Colors.redAccent : Colors.white60, fontSize: 11),
                     ),
                 ],

@@ -5,6 +5,7 @@ class InvestmentGoal {
   final int categoryId;
   final int? subcategoryId;
   final int? purposeId;
+  final int? merchantId;
   final String? createdTime;
   final String? updatedTime;
 
@@ -12,6 +13,7 @@ class InvestmentGoal {
   final String? categoryName;
   final String? icon;
   final String? iconColor;
+  final String? merchantName;
 
   InvestmentGoal({
     this.id,
@@ -20,11 +22,13 @@ class InvestmentGoal {
     required this.categoryId,
     this.subcategoryId,
     this.purposeId,
+    this.merchantId,
     this.createdTime,
     this.updatedTime,
     this.categoryName,
     this.icon,
     this.iconColor,
+    this.merchantName,
   });
 
   factory InvestmentGoal.fromMap(Map<String, dynamic> map) {
@@ -35,11 +39,13 @@ class InvestmentGoal {
       categoryId: map['category_id'],
       subcategoryId: map['subcategory_id'],
       purposeId: map['purpose_id'],
+      merchantId: map['merchant_id'],
       createdTime: map['created_time'],
       updatedTime: map['updated_time'],
       categoryName: map['category_name'],
       icon: map['icon'],
       iconColor: map['icon_color'],
+      merchantName: map['merchant_name'],
     );
   }
 
@@ -51,6 +57,7 @@ class InvestmentGoal {
       'category_id': categoryId,
       'subcategory_id': subcategoryId,
       'purpose_id': purposeId,
+      if (merchantId != null) 'merchant_id': merchantId,
       'created_time': createdTime,
       'updated_time': updatedTime,
     };
@@ -63,11 +70,13 @@ class InvestmentGoal {
     int? categoryId,
     int? subcategoryId,
     int? purposeId,
+    int? merchantId,
     String? createdTime,
     String? updatedTime,
     String? categoryName,
     String? icon,
     String? iconColor,
+    String? merchantName,
   }) {
     return InvestmentGoal(
       id: id ?? this.id,
@@ -76,11 +85,13 @@ class InvestmentGoal {
       categoryId: categoryId ?? this.categoryId,
       subcategoryId: subcategoryId ?? this.subcategoryId,
       purposeId: purposeId ?? this.purposeId,
+      merchantId: merchantId ?? this.merchantId,
       createdTime: createdTime ?? this.createdTime,
       updatedTime: updatedTime ?? this.updatedTime,
       categoryName: categoryName ?? this.categoryName,
       icon: icon ?? this.icon,
       iconColor: iconColor ?? this.iconColor,
+      merchantName: merchantName ?? this.merchantName,
     );
   }
 }

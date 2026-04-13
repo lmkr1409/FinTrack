@@ -5,6 +5,7 @@ import '../../../core/theme/app_colors.dart';
 import '../../../models/strategy_models.dart';
 import '../../../services/providers.dart';
 import '../../../widgets/glass_card.dart';
+import '../../labeling/screens/label_screen.dart';
 
 class StrategyTab extends ConsumerStatefulWidget {
   final DateTime selectedMonth;
@@ -60,16 +61,17 @@ class _StrategyTabState extends ConsumerState<StrategyTab> {
     final totalAllocated = _progress.fold(0.0, (sum, p) => sum + p.targetAmount);
     final totalUsed = _progress.fold(0.0, (sum, p) => sum + p.actualAmount);
     final remaining = _baseline - totalAllocated;
+    final isDemo = ref.watch(demoModeProvider).valueOrNull ?? false;
 
     return RefreshIndicator(
       onRefresh: _loadData,
       child: ListView(
         padding: const EdgeInsets.all(16),
         children: [
-          _buildSummaryCard(totalUsed),
+          _buildSummaryCard(totalUsed, isDemo),
           const SizedBox(height: 16),
-          ..._progress.map((p) => _buildBucketCard(p)),
-          if (remaining.abs() > 1) _buildAllocationWarning(remaining),
+          ..._progress.map((p) => _buildBucketCard(p, isDemo)),
+          if (remaining.abs() > 1) _buildAllocationWarning(remaining, isDemo),
           const SizedBox(height: 80), // Fab spacing
         ],
       ),
@@ -77,7 +79,7 @@ class _StrategyTabState extends ConsumerState<StrategyTab> {
   }
 
 
-  Widget _buildSummaryCard(double totalUsed) {
+  Widget _buildSummaryCard(double totalUsed, bool isDemo) {
     final remainingAvailable = _baseline - totalUsed;
     return GlassCard(
       padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
@@ -94,10 +96,13 @@ class _StrategyTabState extends ConsumerState<StrategyTab> {
                   'Strategic Progress Summary', 
                   style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13)
                 ),
-                Text(
-                  'Baseline: ₹${_baseline.toStringAsFixed(0)} | Used: ₹${totalUsed.toStringAsFixed(0)} | ₹${remainingAvailable.toStringAsFixed(0)} available',
-                  style: const TextStyle(color: Colors.white60, fontSize: 11),
-                ),
+                isDemo
+                  ? const Text('Baseline: [hidden] | Used: [hidden] | [hidden] available',
+                      style: TextStyle(color: Colors.white60, fontSize: 11))
+                  : Text(
+                      'Baseline: ₹${_baseline.toStringAsFixed(0)} | Used: ₹${totalUsed.toStringAsFixed(0)} | ₹${remainingAvailable.toStringAsFixed(0)} available',
+                      style: const TextStyle(color: Colors.white60, fontSize: 11),
+                    ),
               ],
             ),
           ),
@@ -106,15 +111,27 @@ class _StrategyTabState extends ConsumerState<StrategyTab> {
     );
   }
 
-  Widget _buildBucketCard(BucketProgress p) {
+  Widget _buildBucketCard(BucketProgress p, bool isDemo) {
     final isInvestment = p.bucket.bucketType == 'SAVED';
     final progressColor = isInvestment 
       ? (p.actualAmount >= p.targetAmount ? Colors.greenAccent : AppColors.primary)
       : (p.actualAmount > p.targetAmount ? AppColors.expense : Colors.greenAccent);
 
-    return GlassCard(
-      margin: const EdgeInsets.only(bottom: 12),
-      child: Padding(
+    return GestureDetector(
+      onTap: () {
+        if (ModalRoute.of(context)?.isCurrent == true) {
+          Navigator.push(context, MaterialPageRoute(builder: (_) => LabelScreen(
+        showBackButton: true,
+        initialMonth: widget.selectedMonth.month,
+        initialYear: widget.selectedMonth.year,
+        initialNature: p.bucket.bucketType == 'SAVED' ? 'INVESTMENTS' : 'TRANSACTIONS',
+        initialType: p.bucket.bucketType == 'SPENT' ? 'DEBIT' : null,
+      )));
+    }
+  },
+  child: GlassCard(
+        margin: const EdgeInsets.only(bottom: 12),
+        child: Padding(
         padding: const EdgeInsets.all(16.0),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -151,10 +168,14 @@ class _StrategyTabState extends ConsumerState<StrategyTab> {
                 Column(
                   crossAxisAlignment: CrossAxisAlignment.end,
                   children: [
-                    Text('₹${p.actualAmount.toStringAsFixed(0)}', 
-                      style: TextStyle(fontWeight: FontWeight.bold, color: progressColor)),
-                    Text('Target: ₹${p.targetAmount.toStringAsFixed(0)}', 
-                      style: const TextStyle(color: Colors.white24, fontSize: 10)),
+                    isDemo
+                      ? const Icon(Icons.visibility_off_rounded, size: 14, color: Colors.white54)
+                      : Text('₹${p.actualAmount.toStringAsFixed(0)}', 
+                          style: TextStyle(fontWeight: FontWeight.bold, color: progressColor)),
+                    isDemo
+                      ? const Icon(Icons.visibility_off_rounded, size: 10, color: Colors.white24)
+                      : Text('Target: ₹${p.targetAmount.toStringAsFixed(0)}', 
+                          style: const TextStyle(color: Colors.white24, fontSize: 10)),
                   ],
                 ),
               ],
@@ -173,12 +194,14 @@ class _StrategyTabState extends ConsumerState<StrategyTab> {
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Text(
-                  isInvestment 
-                    ? (p.actualAmount >= p.targetAmount ? 'Goal Achieved!' : '₹${(p.targetAmount - p.actualAmount).toStringAsFixed(0)} more to save')
-                    : (p.actualAmount > p.targetAmount ? 'Overspent by ₹${(p.actualAmount - p.targetAmount).toStringAsFixed(0)}' : '₹${(p.targetAmount - p.actualAmount).toStringAsFixed(0)} remaining'),
-                  style: TextStyle(fontSize: 10, color: progressColor.withOpacity(0.8)),
-                ),
+                isDemo
+                  ? const Icon(Icons.visibility_off_rounded, size: 10, color: Colors.white54)
+                  : Text(
+                      isInvestment 
+                        ? (p.actualAmount >= p.targetAmount ? 'Goal Achieved!' : '₹${(p.targetAmount - p.actualAmount).toStringAsFixed(0)} more to save')
+                        : (p.actualAmount > p.targetAmount ? 'Overspent by ₹${(p.actualAmount - p.targetAmount).toStringAsFixed(0)}' : '₹${(p.targetAmount - p.actualAmount).toStringAsFixed(0)} remaining'),
+                      style: TextStyle(fontSize: 10, color: progressColor.withOpacity(0.8)),
+                    ),
                 Text('${(p.percentage * 100).toStringAsFixed(0)}%', 
                   style: TextStyle(fontSize: 10, color: progressColor)),
               ],
@@ -186,10 +209,10 @@ class _StrategyTabState extends ConsumerState<StrategyTab> {
           ],
         ),
       ),
-    );
+    ));
   }
 
-  Widget _buildAllocationWarning(double remaining) {
+  Widget _buildAllocationWarning(double remaining, bool isDemo) {
     final isNegative = remaining < 0;
     return Container(
       margin: const EdgeInsets.only(top: 8),
@@ -207,8 +230,8 @@ class _StrategyTabState extends ConsumerState<StrategyTab> {
           Expanded(
             child: Text(
               isNegative 
-                ? 'Allocations exceed salary by ₹${(-remaining).toStringAsFixed(0)}' 
-                : '₹${remaining.toStringAsFixed(0)} of salary is unallocated',
+                ? (isDemo ? 'Allocations exceed salary' : 'Allocations exceed salary by ₹${(-remaining).toStringAsFixed(0)}')
+                : (isDemo ? 'Salary is unallocated' : '₹${remaining.toStringAsFixed(0)} of salary is unallocated'),
               style: TextStyle(fontSize: 12, color: isNegative ? AppColors.expense : Colors.amber),
             ),
           ),
@@ -225,6 +248,9 @@ class _StrategyTabState extends ConsumerState<StrategyTab> {
       case 'rocket_launch_rounded': return Icons.rocket_launch_rounded;
       case 'shield_rounded': return Icons.shield_rounded;
       case 'card_giftcard_rounded': return Icons.card_giftcard_rounded;
+      case 'volunteer_activism_rounded': return Icons.volunteer_activism_rounded;
+      case 'savings_rounded': return Icons.savings_rounded;
+      case 'home_rounded': return Icons.home_rounded;
       default: return Icons.category_rounded;
     }
   }

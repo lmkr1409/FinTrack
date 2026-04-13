@@ -177,9 +177,9 @@ class SmsParsingService {
       );
 
       final txnRepo = container.read(transactionRepositoryProvider);
-      final insertedId = await txnRepo.insertTransaction(newTransaction);
+      await txnRepo.insertTransaction(newTransaction);
 
-    } catch (e, stackTrace) {
+    } catch (e) {
     }
   }
 

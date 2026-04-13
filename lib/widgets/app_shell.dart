@@ -12,6 +12,10 @@ import '../features/help/screens/help_screen.dart';
 import '../services/sms_listener_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../features/settings/screens/lock_screen.dart';
+import '../services/security_service.dart';
+import '../services/providers.dart';
+
 /// Root widget: Material 3 Navigation Drawer with themed gradient header.
 class AppShell extends ConsumerStatefulWidget {
   const AppShell({super.key});
@@ -20,11 +24,14 @@ class AppShell extends ConsumerStatefulWidget {
   ConsumerState<AppShell> createState() => _AppShellState();
 }
 
-class _AppShellState extends ConsumerState<AppShell> {
+class _AppShellState extends ConsumerState<AppShell> with WidgetsBindingObserver {
   int _selectedIndex = 0;
+  bool _isLocked = false;
   bool _isSyncingSms = true; // Assume syncing starts on launch
   int _syncCurrent = 0;
   int _syncTotal = 0;
+  DateTime? _lastUnlockTime;
+  DateTime? _lastPauseTime;
 
   static const _titles = [
     'Insights',
@@ -46,9 +53,111 @@ class _AppShellState extends ConsumerState<AppShell> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     WidgetsBinding.instance.addPostFrameCallback((_) {
+      _checkLockStatus();
       _startInitialSync();
     });
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.paused) {
+      _lastPauseTime = DateTime.now();
+    } else if (state == AppLifecycleState.resumed) {
+      _checkGracePeriodAndLock();
+    }
+  }
+
+  Future<void> _checkGracePeriodAndLock() async {
+    if (_lastPauseTime == null) {
+      _checkLockStatus();
+      return;
+    }
+
+    final security = ref.read(securityServiceProvider);
+    final timeout = await security.getLockTimeoutSeconds();
+    final backgroundDuration = DateTime.now().difference(_lastPauseTime!).inSeconds;
+
+    if (backgroundDuration >= timeout) {
+      _checkLockStatus();
+    }
+  }
+
+  Future<void> _checkLockStatus() async {
+    final security = ref.read(securityServiceProvider);
+    final shouldLock = await security.shouldShowLock();
+    
+    // Ignore if unlocked in the last 2 seconds (to prevent biometric bounce loops)
+    if (_lastUnlockTime != null && 
+        DateTime.now().difference(_lastUnlockTime!).inSeconds < 2) {
+      return;
+    }
+
+    if (shouldLock && !_isLocked) {
+      _showLockScreen();
+    }
+  }
+
+  void _showLockScreen() async {
+    final security = ref.read(securityServiceProvider);
+    final hasCreds = await security.hasCredentials();
+    final method = await security.getAuthMethod();
+
+    if (mounted) {
+      setState(() => _isLocked = true);
+
+      if (!hasCreds) {
+        // MANDATORY SETUP FLOW
+        await Navigator.of(context).push(
+          MaterialPageRoute(
+            builder: (context) => LockScreen(
+              mode: LockScreenMode.setup,
+              method: AuthMethod.pin, // Default to PIN setup
+              isMandatory: true,
+              onSetupComplete: (pin) async {
+                await security.savePin(pin);
+                await security.setAuthMethod(AuthMethod.pin);
+                if (Navigator.of(context).canPop()) {
+                  Navigator.of(context).pop();
+                }
+              },
+            ),
+            fullscreenDialog: true,
+          ),
+        );
+      } else {
+        // AUTHENTICATION FLOW
+        await Navigator.of(context).push(
+          MaterialPageRoute(
+            builder: (context) => LockScreen(
+              mode: LockScreenMode.authenticate,
+              method: method,
+              onAuthenticated: () {
+                Navigator.pop(context);
+              },
+            ),
+            fullscreenDialog: true,
+          ),
+        );
+      }
+
+      _lastUnlockTime = DateTime.now();
+
+      // Small delay before setting _isLocked to false to catch any trailing resumed events
+      // during modal dialog pop transitions.
+      await Future.delayed(const Duration(milliseconds: 500));
+      
+      if (mounted) {
+        setState(() => _isLocked = false);
+      }
+    }
   }
 
   Future<void> _startInitialSync() async {

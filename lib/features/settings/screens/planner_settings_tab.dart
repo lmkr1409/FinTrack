@@ -21,7 +21,7 @@ class _PlannerSettingsTabState extends State<PlannerSettingsTab> {
         child: Column(
           children: [
             Padding(
-              padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+              padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
               child: SegmentedButton<int>(
                 segments: const [
                   ButtonSegment(

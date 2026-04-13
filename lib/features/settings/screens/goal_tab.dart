@@ -7,6 +7,7 @@ import '../../../core/utils/icon_helper.dart';
 import '../../../models/category.dart';
 import '../../../models/expense_purpose.dart';
 import '../../../models/investment_goal.dart';
+import '../../../models/merchant.dart';
 import '../../../models/sub_category.dart';
 import '../../../services/analytics_service.dart';
 import '../../../services/providers.dart';
@@ -27,6 +28,7 @@ class _GoalTabState extends ConsumerState<GoalTab> {
   List<Category> _investmentCategories = [];
   List<SubCategory> _allSubCategories = [];
   List<ExpensePurpose> _allPurposes = [];
+  List<Merchant> _merchants = [];
 
   // progress cache (key: goalId, value: savedAmount)
   final Map<int, double> _progressCache = {};
@@ -45,11 +47,12 @@ class _GoalTabState extends ConsumerState<GoalTab> {
     final subCatRepo = ref.read(subCategoryRepositoryProvider);
     final purposeRepo = ref.read(expensePurposeRepositoryProvider);
 
-    final goals = await goalRepo.getAllGoalsWithCategory();
+    final goals = await goalRepo.getAllGoalsWithMetadata();
     final allCats = await catRepo.getAllSorted();
     final invCats = allCats.where((c) => c.categoryType == 'INVESTMENTS').toList();
     final allSubs = await subCatRepo.getAllSorted();
     final allPurps = await purposeRepo.getAllSorted();
+    final allMerchants = await ref.read(merchantRepositoryProvider).getAllSorted();
 
     // Fetch progress for each goal up to NOW
     final now = DateTime.now();
@@ -64,6 +67,7 @@ class _GoalTabState extends ConsumerState<GoalTab> {
       _investmentCategories = invCats;
       _allSubCategories = allSubs;
       _allPurposes = allPurps;
+      _merchants = allMerchants;
       _progressCache.clear();
       _progressCache.addAll(progressMap);
       _loading = false;
@@ -77,6 +81,7 @@ class _GoalTabState extends ConsumerState<GoalTab> {
     int? selectedCategory = editGoal?.categoryId;
     int? selectedSubcategory = editGoal?.subcategoryId;
     int? selectedPurpose = editGoal?.purposeId;
+    int? selectedMerchant = editGoal?.merchantId;
 
     if (_investmentCategories.isNotEmpty && selectedCategory == null) {
       selectedCategory = _investmentCategories.first.id;
@@ -162,6 +167,24 @@ class _GoalTabState extends ConsumerState<GoalTab> {
                       });
                     },
                   ),
+                  const SizedBox(height: 12),
+
+                  // Merchant Dropdown (New)
+                  DropdownButtonFormField<int?>(
+                    value: selectedMerchant,
+                    decoration: const InputDecoration(labelText: 'Investment Platform (Recommended)', border: OutlineInputBorder()),
+                    items: [
+                      const DropdownMenuItem(value: null, child: Text('-- None --')),
+                      ..._merchants.map((m) {
+                        return DropdownMenuItem(value: m.id, child: Text(m.merchantName));
+                      }),
+                    ],
+                    onChanged: (val) {
+                      setDialogState(() {
+                        selectedMerchant = val;
+                      });
+                    },
+                  ),
                 ],
               ),
             ),
@@ -193,6 +216,7 @@ class _GoalTabState extends ConsumerState<GoalTab> {
           categoryId: selectedCategory,
           subcategoryId: selectedSubcategory,
           purposeId: selectedPurpose,
+          merchantId: selectedMerchant,
         ));
       } else {
         await repo.insertGoal(InvestmentGoal(
@@ -201,6 +225,7 @@ class _GoalTabState extends ConsumerState<GoalTab> {
           categoryId: selectedCategory!,
           subcategoryId: selectedSubcategory,
           purposeId: selectedPurpose,
+          merchantId: selectedMerchant,
         ));
       }
       _loadData();
@@ -267,6 +292,7 @@ class _GoalTabState extends ConsumerState<GoalTab> {
                 final progress = progressRaw.clamp(0.0, 1.0);
 
                 final String mappings = [
+                  if (goal.merchantName != null) goal.merchantName!,
                   goal.categoryName ?? 'Unknown',
                   if (subName != null) subName,
                   if (purposeName != null) purposeName,

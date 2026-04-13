@@ -5,19 +5,20 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/theme/app_colors.dart';
 import '../../../services/analytics_service.dart';
+import '../../../services/providers.dart';
 import '../../../services/sms_listener_service.dart';
 import '../../../widgets/glass_card.dart';
 
 /// Budgets tab — budget vs actual with glassmorphic cards and themed progress bars.
-class BudgetsTab extends StatefulWidget {
+class BudgetsTab extends ConsumerStatefulWidget {
   final DateTime selectedMonth;
   const BudgetsTab({super.key, required this.selectedMonth});
 
   @override
-  State<BudgetsTab> createState() => _BudgetsTabState();
+  ConsumerState<BudgetsTab> createState() => _BudgetsTabState();
 }
 
-class _BudgetsTabState extends State<BudgetsTab> {
+class _BudgetsTabState extends ConsumerState<BudgetsTab> {
   final _analytics = AnalyticsService();
   bool _loading = true;
   List<Map<String, dynamic>> _budgets = [];
@@ -70,18 +71,19 @@ class _BudgetsTabState extends State<BudgetsTab> {
 
   @override
   Widget build(BuildContext context) {
-    return _buildContent();
+    final isDemo = ref.watch(demoModeProvider).valueOrNull ?? false;
+    return _buildContent(isDemo);
   }
 
-  Widget _buildContent() {
+  Widget _buildContent(bool isDemo) {
     return Column(
       children: [
         // Budget List
         Expanded(
           child: Column(
             children: [
-              _buildGlobalBudgetSummary(),
-              Expanded(child: _buildBudgetGrid()),
+              _buildGlobalBudgetSummary(isDemo),
+              Expanded(child: _buildBudgetGrid(isDemo)),
             ],
           ),
         ),
@@ -89,7 +91,7 @@ class _BudgetsTabState extends State<BudgetsTab> {
     );
   }
 
-  Widget _buildBudgetGrid() {
+  Widget _buildBudgetGrid(bool isDemo) {
     if (_loading) return const Center(child: CircularProgressIndicator());
     final budgetsWithoutGlobal = _budgets.where((b) => b['category_id'] != null).toList();
 
@@ -219,29 +221,31 @@ class _BudgetsTabState extends State<BudgetsTab> {
                       ),
                       const SizedBox(height: 12),
                       Text(
-                        '₹${actual.toStringAsFixed(0)} / ₹${budgetM.toStringAsFixed(0)}',
+                        isDemo ? '--' : '₹${actual.toStringAsFixed(0)} / ₹${budgetM.toStringAsFixed(0)}',
                         style: const TextStyle(color: AppColors.textMuted, fontSize: 11),
                       ),
                       if (hasAnnual) ...[
                         const SizedBox(height: 2),
                         Text(
-                          'Yearly: ₹${yearlyActual.toStringAsFixed(0)} / ₹${budgetA.toStringAsFixed(0)}',
+                          isDemo ? '--' : 'Yearly: ₹${yearlyActual.toStringAsFixed(0)} / ₹${budgetA.toStringAsFixed(0)}',
                           style: const TextStyle(color: Colors.white38, fontSize: 10),
                         ),
                       ],
                       const SizedBox(height: 4),
-                      Text(
-                        isOverM
-                          ? 'Over by ₹${(actual - budgetM).toStringAsFixed(0)}'
-                          : '₹${(budgetM - actual).toStringAsFixed(0)} left',
-                        style: TextStyle(
-                          color: isOverM ? AppColors.expense : AppColors.income,
-                          fontWeight: FontWeight.w600,
-                          fontSize: 11
-                        ),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
+                      isDemo
+                        ? const Icon(Icons.visibility_off_rounded, size: 11, color: AppColors.textMuted)
+                        : Text(
+                            isOverM
+                              ? 'Over by ₹${(actual - budgetM).toStringAsFixed(0)}'
+                              : '₹${(budgetM - actual).toStringAsFixed(0)} left',
+                            style: TextStyle(
+                              color: isOverM ? AppColors.expense : AppColors.income,
+                              fontWeight: FontWeight.w600,
+                              fontSize: 11
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
                     ],
                   ),
                 );
@@ -268,7 +272,7 @@ class _BudgetsTabState extends State<BudgetsTab> {
     );
   }
 
-  Widget _buildGlobalBudgetSummary() {
+  Widget _buildGlobalBudgetSummary(bool isDemo) {
     final globalEntry = _budgets.where((b) => b['category_id'] == null).firstOrNull;
     if (globalEntry == null) return const SizedBox.shrink();
 
@@ -296,22 +300,26 @@ class _BudgetsTabState extends State<BudgetsTab> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     const Text('Total Budget Allocation', style: TextStyle(fontWeight: FontWeight.bold, color: AppColors.textPrimary)),
-                    Text(
-                      'Income: ₹${income.toStringAsFixed(0)}',
-                      style: const TextStyle(fontSize: 11, color: AppColors.textMuted),
-                    ),
+                    isDemo
+                      ? const Icon(Icons.visibility_off_rounded, size: 11, color: AppColors.textMuted)
+                      : Text(
+                          'Income: ₹${income.toStringAsFixed(0)}',
+                          style: const TextStyle(fontSize: 11, color: AppColors.textMuted),
+                        ),
                   ],
                 ),
                 Column(
                   crossAxisAlignment: CrossAxisAlignment.end,
                   children: [
-                    Text('₹${actual.toStringAsFixed(0)} / ₹${budgeted.toStringAsFixed(0)}', style: const TextStyle(fontWeight: FontWeight.bold)),
+                    isDemo
+                      ? const Icon(Icons.visibility_off_rounded, size: 14, color: AppColors.textMuted)
+                      : Text('₹${actual.toStringAsFixed(0)} / ₹${budgeted.toStringAsFixed(0)}', style: const TextStyle(fontWeight: FontWeight.bold)),
                     Text(
                       remainingToAllocate == 0 
                         ? 'Fully Allocated' 
                         : remainingToAllocate > 0 
-                          ? '₹${remainingToAllocate.toStringAsFixed(0)} Left to Allocate'
-                          : 'Over-allocated by ₹${(-remainingToAllocate).toStringAsFixed(0)}',
+                          ? (isDemo ? 'More to allocate' : '₹${remainingToAllocate.toStringAsFixed(0)} Left to Allocate')
+                          : (isDemo ? 'Over-allocated' : 'Over-allocated by ₹${(-remainingToAllocate).toStringAsFixed(0)}'),
                       style: TextStyle(
                         fontSize: 10, 
                         color: remainingToAllocate >= 0 ? Colors.greenAccent : AppColors.expense,
@@ -337,7 +345,9 @@ class _BudgetsTabState extends State<BudgetsTab> {
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 Text(
-                  isExceeded ? 'Exceeded by ₹${(actual - budgeted).toStringAsFixed(0)}' : '₹${(budgeted - actual).toStringAsFixed(0)} remaining',
+                  isExceeded
+                    ? (isDemo ? 'Exceeded' : 'Exceeded by ₹${(actual - budgeted).toStringAsFixed(0)}')
+                    : (isDemo ? 'Remaining' : '₹${(budgeted - actual).toStringAsFixed(0)} remaining'),
                   style: TextStyle(color: isExceeded ? AppColors.expense : Colors.greenAccent, fontSize: 12, fontWeight: FontWeight.w600),
                 ),
                 Text('${(progress * 100).toStringAsFixed(0)}%', style: TextStyle(color: isExceeded ? AppColors.expense : Colors.greenAccent, fontSize: 12)),
