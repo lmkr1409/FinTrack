@@ -2,88 +2,134 @@ import 'package:flutter/material.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../widgets/glass_card.dart';
 
+import 'app_tour_screen.dart';
+import '../../labeling/screens/labeling_rules_screen.dart';
+import '../../settings/screens/accounts_payments_tab.dart';
+import '../../categories/screens/categories_tab.dart';
+import '../../settings/screens/planner_settings_tab.dart';
+import '../../settings/screens/settings_tab.dart';
+
 class HelpScreen extends StatelessWidget {
   const HelpScreen({super.key});
+
+  void _teleport(BuildContext context, String title, Widget child) {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (context) => Scaffold(
+          appBar: AppBar(title: Text(title)),
+          body: child,
+        ),
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.transparent, // Background handled by the drawer/main layout
+      backgroundColor: Colors.transparent, 
       body: ListView(
         padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 32),
         children: [
-          const Text(
-            'App Guide & Help',
-            style: TextStyle(
-              fontSize: 32,
-              fontWeight: FontWeight.bold,
-              color: Colors.white,
-            ),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              const Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'App Guide & Setup',
+                      style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold, color: Colors.white),
+                    ),
+                    SizedBox(height: 8),
+                    Text(
+                      'Master the features of FinTrack.',
+                      style: TextStyle(color: AppColors.textSecondary, fontSize: 14),
+                    ),
+                  ],
+                ),
+              ),
+              IconButton.filledTonal(
+                icon: const Icon(Icons.play_circle_fill_rounded, size: 28),
+                color: AppColors.primary,
+                tooltip: 'Replay App Tour',
+                onPressed: () {
+                  Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (context) => const AppTourScreen(),
+                      fullscreenDialog: true,
+                    ),
+                  );
+                },
+              ),
+            ],
           ),
-          const SizedBox(height: 8),
-          const Text(
-            'Master the features of FinTrack with this guide.',
-            style: TextStyle(color: AppColors.textSecondary, fontSize: 16),
-          ),
-          const SizedBox(height: 32),
           
-          _buildHeader('Getting Started'),
+          const SizedBox(height: 32),
+          _buildHeader('Setup Checklist'),
           const SizedBox(height: 16),
           
-          _buildHelpSection(
+          _buildActionSection(
             context,
             icon: Icons.sms_rounded,
-            title: 'Bank Senders (SMS Sync)',
-            description: 'FinTrack tracks your spending by reading banking SMS. \n\n• The app looks for alphanumeric senders (like XX-ABCBNK).\n• If your bank\'s SMS aren\'t appearing, go to Labeling Rules > Transaction Rules and add a "Bank Sender" rule with your bank\'s ID.',
-            color: AppColors.primary,
+            title: '1. Verify Bank Senders',
+            description: 'Check if your bank is listed. If missing, add its SMS sender ID (e.g., AD-HDFCBK).',
+            color: Colors.blueAccent,
+            onAction: () => _teleport(context, 'Bank Senders', const LabelingRulesScreen()),
           ),
           
-          _buildHelpSection(
+          _buildActionSection(
             context,
             icon: Icons.account_balance_rounded,
-            title: 'Accounts & Cards',
-            description: 'Source tracking starts with your accounts.\n\n• Create your Bank Accounts first.\n• Link your Credit/Debit cards to these accounts. \n• This allows the app to group transactions based on the account or card mentioned in your SMS.',
-            color: Colors.blueAccent,
+            title: '2. Accounts & Cards',
+            description: 'Add your Bank Accounts and link your Credit Cards to track transaction sources.',
+            color: Colors.greenAccent,
+            onAction: () => _teleport(context, 'Accounts & Cards', const AccountsPaymentsTab()),
           ),
-
-          const SizedBox(height: 24),
-          _buildHeader('Automation & Rules'),
-          const SizedBox(height: 16),
           
-          _buildHelpSection(
+          _buildActionSection(
             context,
-            icon: Icons.settings_suggest_rounded,
-            title: 'Transaction Rules',
-            description: 'Teach the app how to identify the "How" of a payment.\n\n• Payment Method: Link keywords like "UPI" or "VISA" to a method.\n• Account/Card: Map "A/c XXXX" or "Card XX1234" to your created Accounts/Cards.\n• Transaction Type: Identify "Debited" as Expense and "Credited" as Income.',
+            icon: Icons.category_rounded,
+            title: '3. Categories',
+            description: 'Review the default expense and investment categories or create your own.',
             color: Colors.purpleAccent,
+            onAction: () => _teleport(context, 'Categories', const CategoriesTab()),
           ),
           
-          _buildHelpSection(
+          _buildActionSection(
             context,
-            icon: Icons.store_rounded,
-            title: 'Merchant Rules',
-            description: 'Teach the app how to identify the "Who" of a payment.\n\n• When you label a transaction for the first time, look for a unique Merchant Keyword (e.g., from a UPI ID).\n• Linking this keyword to a Merchant, Category, and Purpose creates a Rule.\n• Future transactions from the same merchant will be labeled automatically!',
+            icon: Icons.pie_chart_rounded,
+            title: '4. Budgets',
+            description: 'Select a budget framework (like 50/30/20) and assign your categories to buckets.',
             color: Colors.orangeAccent,
+            onAction: () => _teleport(context, 'Budget Planner', const PlannerSettingsTab()),
+          ),
+          
+          _buildActionSection(
+            context,
+            icon: Icons.settings_rounded,
+            title: '5. App Settings',
+            description: 'Enable Privacy mode, App Lock, adjust widgets, and change themes.',
+            color: AppColors.primary,
+            onAction: () => _teleport(context, 'Settings', const SettingsTab()),
           ),
 
           const SizedBox(height: 24),
-          _buildHeader('Advanced Features'),
+          _buildHeader('General Help'),
           const SizedBox(height: 16),
           
-          _buildHelpSection(
-            context,
-            icon: Icons.insights_rounded,
-            title: 'Insights & Trends',
-            description: 'The Analytics tab provides a comprehensive view of your finances. Analyze your spending trends, monitor your budgets, and see a breakdown of your top categories and cards.',
-            color: AppColors.income,
+          _buildInfoSection(
+            icon: Icons.receipt_long_rounded,
+            title: 'Labeling Transactions',
+            description: 'When a new transaction arrives, assign it a Merchant and Category. FinTrack will create a Merchant Rule and automatically label future payments to that merchant!',
+            color: Colors.redAccent,
           ),
           
-          _buildHelpSection(
-            context,
-            icon: Icons.backup_rounded,
-            title: 'Data Privacy & Backup',
-            description: 'All your financial data stays on your device. You can export your data to a JSON file for your own backups via the "Backup & Restore" screen in Settings.',
-            color: AppColors.textMuted,
+          _buildInfoSection(
+            icon: Icons.insights_rounded,
+            title: 'Insights & Analytics',
+            description: 'The Insights tab provides a view of your finances. Analyze spending trends, monitor budgets, and see a breakdown of your top categories.',
+            color: AppColors.income,
           ),
 
           const SizedBox(height: 48),
@@ -114,8 +160,65 @@ class HelpScreen extends StatelessWidget {
     );
   }
 
-  Widget _buildHelpSection(
+  Widget _buildActionSection(
     BuildContext context, {
+    required IconData icon,
+    required String title,
+    required String description,
+    required Color color,
+    required VoidCallback onAction,
+  }) {
+    return GlassCard(
+      margin: const EdgeInsets.only(bottom: 16),
+      padding: const EdgeInsets.all(20),
+      child: Column(
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: color.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(color: color.withOpacity(0.2)),
+                ),
+                child: Icon(icon, color: color, size: 28),
+              ),
+              const SizedBox(width: 16),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      title,
+                      style: const TextStyle(fontWeight: FontWeight.bold, color: AppColors.textPrimary, fontSize: 18),
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      description,
+                      style: const TextStyle(color: AppColors.textSecondary, fontSize: 13, height: 1.5, fontWeight: FontWeight.w400),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          Align(
+            alignment: Alignment.centerRight,
+            child: FilledButton.tonalIcon(
+              onPressed: onAction,
+              icon: const Icon(Icons.arrow_forward_rounded, size: 18),
+              label: const Text('Take Me There'),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildInfoSection({
     required IconData icon,
     required String title,
     required String description,
@@ -123,7 +226,7 @@ class HelpScreen extends StatelessWidget {
   }) {
     return GlassCard(
       margin: const EdgeInsets.only(bottom: 16),
-      padding: const EdgeInsets.all(24),
+      padding: const EdgeInsets.all(20),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -136,28 +239,19 @@ class HelpScreen extends StatelessWidget {
             ),
             child: Icon(icon, color: color, size: 28),
           ),
-          const SizedBox(width: 20),
+          const SizedBox(width: 16),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
                   title,
-                  style: const TextStyle(
-                    fontWeight: FontWeight.bold,
-                    color: AppColors.textPrimary,
-                    fontSize: 20,
-                  ),
+                  style: const TextStyle(fontWeight: FontWeight.bold, color: AppColors.textPrimary, fontSize: 18),
                 ),
-                const SizedBox(height: 12),
+                const SizedBox(height: 8),
                 Text(
                   description,
-                  style: const TextStyle(
-                    color: AppColors.textSecondary,
-                    fontSize: 14,
-                    height: 1.6,
-                    fontWeight: FontWeight.w400,
-                  ),
+                  style: const TextStyle(color: AppColors.textSecondary, fontSize: 13, height: 1.5, fontWeight: FontWeight.w400),
                 ),
               ],
             ),

@@ -33,9 +33,8 @@ dependencies:
   fl_chart: ^1.2.0
   share_plus: ^12.0.1
 
-  # SMS & Notifications
+  # SMS & Security
   telephony: ^0.2.0
-  flutter_local_notifications: ^17.1.2
   permission_handler: ^11.3.0
   shared_preferences: ^2.5.4
   pinput: ^6.0.2

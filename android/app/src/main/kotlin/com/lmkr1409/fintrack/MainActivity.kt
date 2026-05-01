@@ -1,4 +1,4 @@
-package com.fintrack.fintrack
+package com.lmkr1409.fintrack
 
 import io.flutter.embedding.android.FlutterFragmentActivity
 

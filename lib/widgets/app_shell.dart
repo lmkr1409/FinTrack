@@ -9,6 +9,7 @@ import '../features/settings/screens/configuration_screen.dart';
 import '../features/settings/screens/export_import_screen.dart';
 import '../features/help/screens/help_screen.dart';
 
+import '../features/help/screens/app_tour_screen.dart';
 import '../services/sms_listener_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -193,8 +194,12 @@ class _AppShellState extends ConsumerState<AppShell> with WidgetsBindingObserver
     final onboarded = prefs.getBool('onboarding_shown') ?? false;
     if (!onboarded && mounted) {
       await prefs.setBool('onboarding_shown', true);
-      // Optional: auto-navigate to help on first launch?
-      // setState(() => _selectedIndex = 5);
+      Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (context) => const AppTourScreen(),
+          fullscreenDialog: true,
+        ),
+      );
     }
   }
 
